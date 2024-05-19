@@ -32,12 +32,15 @@ class Chess():
 
         self.__positionsOfPieces = [set(range(48, 64)), set(range(16))]
 
-        self.position = list(self.__initalPosition)
-
-        self.round = 0
-
         self.positionsOfPieaceByTeam = self._PositionsOfPiecesByTeam(
             self.position, self)
+
+
+        self.position = list(self.__initalPosition)
+
+        self.positionsOfKings = [60, 4]
+
+        self.round = 0
 
         # [ white left castling( a1 ), white right castling, black left castling, black right castling ]
         self.special_Move_flag = [True, True, True, True]
@@ -51,15 +54,14 @@ class Chess():
         for index, piece in enumerate(self.position):
             if piece == empty:
                 continue
-            positionsOfPieaceByTeam[1 if piece >> 3 else 0] = index
+            positionsOfPieaceByTeam[0 if (piece >> 3) == white else 1] = index
 
         return positionsOfPieaceByTeam
 
     def _reset(self) -> None:
         self.position = list(self.__initalPosition)
         self.round = 0
-        self.positionsOfPieaceByTeam = self._PositionsOfPiecesByTeam(
-            self.position, self)
+        self.positionsOfPieaceByTeam = self.__positionsOfPieces
 
     def _NextRound(self) -> None:
         self.round += 1
@@ -212,7 +214,7 @@ class Chess():
 
         return True
 
-    def _MovCheck(self, Pos: int, mov_Pos: int) -> bool:
+    def _MovRuleCheck(self, Pos: int, mov_Pos: int) -> bool:
         # boundary check
         if Pos < 0 or Pos > 63:
             return False
@@ -290,6 +292,26 @@ class Chess():
             prev_move_file = prev_mov[0] % 8
             if prev_mov[2] % 8 == pawn and abs((prev_mov[0]//8) - (prev_mov[1]//8)) == 2 and prev_move_file == mov_Pos % 8 and abs(prev_move_file - (Pos % 8)) == 1:
                 return True
+
+        return True
+
+    def _Mov(self, Pos: int, mov_Pos: int) -> bool:
+        if self._MovRuleCheck(Pos, mov_Pos) == False:
+            print("movement is invalid by rule")
+            return False
+
+        piece = self.position[Pos]
+        team = piece//8
+
+        if self._AbsolutePinCheck(self.positionsOfKings[team], Pos):
+            print("Piece is in absolute pin")
+            return False
+
+        self.positionsOfPieaceByTeam[team].remove(Pos)
+        self.positionsOfPieaceByTeam[team].add(mov_Pos)
+
+        if piece % 8 == king:
+            self.positionsOfKings[team] = mov_Pos
 
         return True
 
