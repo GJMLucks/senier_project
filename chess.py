@@ -12,7 +12,7 @@ knight_move_offset = (-17, -15, -10, -6, 6, 10, 15, 17)
 
 class Chess():
     def __init__(self):
-        # 1bit(team) + 3bit(piece_type)   ex) 1001 = black+pawn
+        # 1bit(color) + 3bit(piece_type)   ex) 1001 = black+pawn
 
         # 고정 초기 기물 배치
         self.__initalPosition = (
@@ -33,11 +33,12 @@ class Chess():
         self.__positionsOfPieces = [set(range(48, 64)), set(range(16))]
 
         self.position = list(self.__initalPosition)
+        
+        self.positionsOfPieaceByColor = self._PositionsOfPiecesByColor()
+
+        self.positionsOfKings = [60, 4]
 
         self.round = 0
-
-        self.positionsOfPieaceByTeam = self._PositionsOfPiecesByTeam(
-            self.position, self)
 
         # [ white left castling( a1 ), white right castling, black left castling, black right castling ]
         self.special_Move_flag = [True, True, True, True]
@@ -45,45 +46,50 @@ class Chess():
         # [ start pos, end pos, piece ]
         self.previous_Move = [0, 0, 0]
 
-    def _PositionsOfPiecesByTeam(self) -> list[list[int]]:
-        positionsOfPieaceByTeam = [[], []]
+    def _PositionsOfPiecesByColor(self) -> list[list[int]]:
+        positionsOfPieaceByColor = [[], []]
 
         for index, piece in enumerate(self.position):
             if piece == empty:
                 continue
-            positionsOfPieaceByTeam[1 if piece >> 3 else 0] = index
+            positionsOfPieaceByColor[0 if (piece >> 3) == white else 1] = index
 
-        return positionsOfPieaceByTeam
+        return positionsOfPieaceByColor
 
     def _reset(self) -> None:
         self.position = list(self.__initalPosition)
         self.round = 0
-        self.positionsOfPieaceByTeam = self._PositionsOfPiecesByTeam(
-            self.position, self)
+        self.positionsOfPieaceByColor = self.__positionsOfPieces
 
     def _NextRound(self) -> None:
         self.round += 1
 
     def _PrintPiece(self, Pos: int) -> None:
-        team = self.position[Pos]//8
         piece_type = self.position[Pos] % 8
+        
+        if piece_type == empty:
+            print("| __ ", end="")
+            return
+        
+        color = self.position[Pos]//8
 
         print("| ", end="")
 
         initial = pieceInitials[piece_type]
 
+        # "." mean black piece
+        print("b" if color else "w", end="")
+        
         if initial:
-            print(initial, end="")
+            print(initial, end=" ")
         else:
             print("Piece Print err")
             return
 
-        # "." mean black piece
-        print("." if team else " ", end="")
 
     # 체스 출력
     def _PrintChess(self) -> None:
-        print("  *===============================*")
+        print("  *=======================================*")
 
         for i in range(8):
             # rank number
@@ -96,11 +102,11 @@ class Chess():
             if i == 7:
                 break
             # horizontal line
-            print("  ---------------------------------")
+            print("  -----------------------------------------")
 
-        print("  *===============================*")
-        print("    a   b   c   f   e   f   g   h ")
-        print("   (1) (2) (3) (4) (5) (6) (7) (8)")
+        print("  *=======================================*")
+        print("     a    b    c    f    e    f    g    h ")
+        print("    (1)  (2)  (3)  (4)  (5)  (6)  (7)  (8)")
 
     def _Move(self, Pos: int, Mov_Pos: int) -> None:
         self.position[Mov_Pos] = self.position[Pos]
@@ -150,10 +156,10 @@ class Chess():
             print("err : _AbsolutePinCheck, this is not king")
             return [-2]
 
-        team = kingPiece // 8
+        color = kingPiece // 8
 
-        if (piece // 8) != team:
-            print("err : _AbsolutePinCheck, team is not same")
+        if (piece // 8) != color:
+            print("err : _AbsolutePinCheck, color is not same")
             return [-3]
 
         offset = self._directionOffset(King_pos, Pos)
@@ -179,8 +185,8 @@ class Chess():
                 if (current_pos % 8 == 0 or current_pos % 8 == 7):
                     break
                 continue
-            # team check
-            if piece//8 == team:
+            # color check
+            if piece//8 == color:
                 return [64]
 
             piece_type = piece % 8
@@ -212,7 +218,7 @@ class Chess():
 
         return True
 
-    def _MovCheck(self, Pos: int, mov_Pos: int) -> bool:
+    def _MovRuleCheck(self, Pos: int, mov_Pos: int) -> bool:
         # boundary check
         if Pos < 0 or Pos > 63:
             return False
@@ -229,11 +235,11 @@ class Chess():
             print("Round err")
             return False
         if opp_piece and piece//8 == opp_piece//8:
-            print("Team err")
+            print("Color err")
             return False
 
         piece_type = piece % 8
-        Team = piece//8
+        Color = piece//8
 
         rank_dist = mov_Pos % 8 - Pos % 8
         file_dist = mov_Pos//8 - Pos//8
@@ -277,13 +283,13 @@ class Chess():
             # forward
             if rank_dist == 0:
                 # one space
-                if file_dist + 1 == 2*Team:
+                if file_dist + 1 == 2*Color:
                     return True
                 # two space
-                if ((Pos//8) + (5*Team)) == 6 and file_dist + 2 == 4*Team:
+                if ((Pos//8) + (5*Color)) == 6 and file_dist + 2 == 4*Color:
                     return True
             # attack
-            if abs(rank_dist) == 1 and file_dist + 1 == 2*Team and opp_piece:
+            if abs(rank_dist) == 1 and file_dist + 1 == 2*Color and opp_piece:
                 return True
             # en passant
             prev_mov = self.previous_Move
@@ -293,7 +299,27 @@ class Chess():
 
         return True
 
-    def _IsCheck(self, Pos, Team=None, piece_type=None):
+    def _Mov(self, Pos: int, mov_Pos: int) -> bool:
+        if self._MovRuleCheck(Pos, mov_Pos) == False:
+            print("movement is invalid by rule")
+            return False
+
+        piece = self.position[Pos]
+        color = piece//8
+
+        if self._AbsolutePinCheck(self.positionsOfKings[color], Pos):
+            print("Piece is in absolute pin")
+            return False
+
+        self.positionsOfPieaceByColor[color].remove(Pos)
+        self.positionsOfPieaceByColor[color].add(mov_Pos)
+
+        if piece % 8 == king:
+            self.positionsOfKings[color] = mov_Pos
+
+        return True
+
+    def _IsCheck(self, Pos, Color=None, piece_type=None):
         # _IsCheck 는 그 위치가 체크인지 확인하는 함수다.
         # 팀은 정해져야하며 기물 없이 빈칸이어도 된다.
         # 기물 유무에 상관없이 해당 팀의 기물을 그 위치에 움직인다면 잡힐 가능성이 있는지 확인한다.
@@ -306,16 +332,16 @@ class Chess():
             print("Pos err")
             return [-1]  # Pos err
 
-        # team checking
-        if Team is None:
+        # color checking
+        if Color is None:
             if self.position[Pos] == empty:
-                print("Team is not assigned err")
-                return [-2]  # Team is not assigned err
-            Team = self.position[Pos]//8
+                print("Color is not assigned err")
+                return [-2]  # Color is not assigned err
+            Color = self.position[Pos]//8
         else:
-            if Team != self.position[Pos]//8:
-                print("Team is wrong err")
-                return [-3]  # Team is wrong err
+            if Color != self.position[Pos]//8:
+                print("Color is wrong err")
+                return [-3]  # Color is wrong err
 
         # piece_type checking
         if piece_type is None:
@@ -337,8 +363,8 @@ class Chess():
 
             if abs(checking_rank_pos - rank_pos) + abs(checking_file_pos - file_pos) != 3:
                 continue
-            if self.position[current_pos] % 8 == knight and self.position[current_pos]//8 != Team:
-                CheckingPiece.append(pos)
+            if self.position[current_pos] % 8 == knight and self.position[current_pos]//8 != Color:
+                CheckingPiece.append(Pos)
 
         for x_direction, y_direction in [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]:
             for i in range(1, 8):
@@ -353,8 +379,8 @@ class Chess():
                 # opponent existence checking
                 if self.position[current_pos] == empty:
                     continue
-                opp_team = self.position[current_pos]//8
-                if opp_team == Team:
+                opp_color = self.position[current_pos]//8
+                if opp_color == Color:
                     break
 
                 opp_piece_type = self.position[current_pos] % 8
@@ -364,12 +390,12 @@ class Chess():
                         break
 
                     # nomal pawn movement
-                    if Team*2 - y_direction == 1:
+                    if Color*2 - y_direction == 1:
                         CheckingPiece.append(pos)
                         break
 
                     # en passant
-                    if piece_type == pawn and self.position[Pos+16-32*Team] == pawn+8*Team and self.position[Pos+8-16*Team] == empty and y_direction == 0:
+                    if piece_type == pawn and self.position[Pos+16-32*Color] == pawn+8*Color and self.position[Pos+8-16*Color] == empty and y_direction == 0:
                         CheckingPiece.append(pos)
                         break
 
@@ -403,7 +429,7 @@ class Chess():
 
         CheckingPieces = self._IsCheck(Pos)
 
-        Team = self.position[Pos]//8
+        Color = self.position[Pos]//8
         rank_pos = Pos % 8
         file_pos = Pos//8
 
@@ -416,9 +442,9 @@ class Chess():
                 continue
             current_pos = Y*8 + X
 
-            if self.position[current_pos]//8 == Team:
+            if self.position[current_pos]//8 == Color:
                 continue
-            if self._IsCheck(current_pos, Team):
+            if self._IsCheck(current_pos, Color):
                 continue
 
             return False
@@ -451,7 +477,7 @@ class Chess():
                 return True
 
             for i in range(Pos + offset, opp_Pos, offset):
-                if self._IsCheck(i, abs(1-Team)):
+                if self._IsCheck(i, abs(1-Color)):
                     return False
 
         return True
