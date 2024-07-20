@@ -1,5 +1,5 @@
 from const_variable import *
-import printing_chessboard
+from printing_chessboard import *
 
 
 class Chess():
@@ -67,7 +67,7 @@ class Chess():
 
         print("| ", end="")
 
-        initial = pieceInitials[piece_type]
+        initial = pieceLiteral[piece_type]
 
         # "." mean black piece
         print("b" if color else "w", end="")
@@ -508,7 +508,7 @@ class Chess():
 
 chess = Chess()
 
-chess._PrintChess()
+printchess(chess.position)
 
 dict_Piecepiece_type = {"P": 1, "R": 2, "N": 3, "B": 4, "Q": 5, "K": 6}
 
@@ -516,7 +516,8 @@ while (chess._IsEnd() == False):
     Round = chess.round
 
     print("\nRound :", Round+1, "\n")
-    chess._PrintChess
+
+    printchess(chess.position)
 
     INPUT = input()
     err_input = False

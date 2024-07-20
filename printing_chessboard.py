@@ -1,31 +1,41 @@
 from const_variable import *
 
 
-def PrintPiece(chess_positons: list[int], Pos: int) -> None:
-    piece_type = chess_positons[Pos] % 8
+def printpiece(chess_positons: list[int], index: int) -> None:
+    if 0 > index or index >= 64:
+        raise ValueError("index is out of range")
 
-    if piece_type == empty:
+    piece = chess_positons[index]
+
+    if piece == empty:
         print("| __ ", end="")
         return
 
-    color = chess_positons[Pos]//8
+    piece_color = piece & 0b00000011
+    piece_type = piece & 0b11111100
+
+    if not piece_type or not piece_color:
+        raise ValueError("undefined piece")
 
     print("| ", end="")
 
-    initial = pieceInitials[piece_type]
+    if piece_color == 0b11:
+        raise ValueError("undefined piece_color")
 
-    # "." mean black piece
-    print("b" if color else "w", end="")
+    print("w" if piece_color == 1 else "b", end="")
 
-    if initial:
-        print(initial, end=" ")
-    else:
-        print("Piece Print err")
-        return
+    for i in range(2, 8):
+        if piece_type == 1 << i:
+            print(pieceLiteral[i - 2], end=" ")
+            break
+        if i == 7:
+            raise ValueError("undefined piece_type")
+
+    return
 
 
 # 체스 출력
-def PrintChess(chess_positons: list[int]) -> None:
+def printchess(chess_positons: list[int]) -> None:
     print("  *=======================================*")
 
     for i in range(8):
@@ -33,7 +43,7 @@ def PrintChess(chess_positons: list[int]) -> None:
         print(8-i, end=" ")
         # piece initial
         for j in range(8):
-            PrintPiece(chess_positons, i*8 + j)
+            printpiece(chess_positons, i*8 + j)
         # vertical line
         print("|")
         if i == 7:
