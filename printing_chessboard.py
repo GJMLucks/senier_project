@@ -1,15 +1,17 @@
 from const_variable import *
 
 
-def printpiece(chess_positons: list[int], index: int) -> None:
+def printpiece(pieceplacement: list[int], index: int) -> None:
     if 0 > index or index >= 64:
         raise ValueError("index is out of range")
 
-    piece = chess_positons[index]
+    piece = pieceplacement[index]
 
+    # empty check
     if piece == empty:
         print("| __ ", end="")
         return
+
 
     piece_color = piece & 0b00000011
     piece_type = piece & 0b11111100
@@ -19,10 +21,12 @@ def printpiece(chess_positons: list[int], index: int) -> None:
 
     print("| ", end="")
 
+
     if piece_color == 0b11:
         raise ValueError("undefined piece_color")
 
     print("w" if piece_color == 1 else "b", end="")
+
 
     for i in range(2, 8):
         if piece_type == 1 << i:
@@ -34,21 +38,21 @@ def printpiece(chess_positons: list[int], index: int) -> None:
     return
 
 
-# 체스 출력
-def printchess(chess_positons: list[int]) -> None:
+def printchess(pieceplacement: list[int]) -> None:
     print("  *=======================================*")
 
     for i in range(8):
-        # rank number
+        # rank index
         print(8-i, end=" ")
+
         # piece initial
         for j in range(8):
-            printpiece(chess_positons, i*8 + j)
-        # vertical line
+            printpiece(pieceplacement, i*8 + j)
+
         print("|")
         if i == 7:
             break
-        # horizontal line
+
         print("  -----------------------------------------")
 
     print("  *=======================================*")
