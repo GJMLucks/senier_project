@@ -1,7 +1,6 @@
 from const_variable import *
 from printing_chessboard import *
 
-
 class Chess():
     def __init__(self):
         # 1bit(color) + 3bit(pieceType)   ex) 1001 = black+pawn
