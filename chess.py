@@ -2,30 +2,15 @@ from const_variable import *
 from printing_chessboard import *
 
 
+bitBoardSet: list[int] = bitBoardDefaultSet
+
+
+
+
 class Chess():
     def __init__(self):
-        # 1bit(color) + 3bit(pieceType)   ex) 1001 = black+pawn
 
-        # 고정 초기 기물 배치
-        self.__initPlacement = (
-            black + rook, black + knight, black + bishop, black +
-            queen, black + king, black + bishop, black + knight, black + rook,
-            black + pawn, black + pawn, black + pawn, black + pawn, black +
-            pawn, black + pawn, black + pawn, black + pawn,
-            empty, empty, empty, empty, empty, empty, empty, empty,
-            empty, empty, empty, empty, empty, empty, empty, empty,
-            empty, empty, empty, empty, empty, empty, empty, empty,
-            empty, empty, empty, empty, empty, empty, empty, empty,
-            white + pawn, white + pawn, white + pawn, white + pawn, white +
-            pawn, white + pawn, white + pawn, white + pawn,
-            white + rook, white + knight, white + bishop, white + queen, white +
-            king, white + bishop, white + knight, white + rook,
-        )
-
-        self.__placementsOfPieces = [set(range(48, 64)), set(range(16))]
-
-        # Piece placement
-        self.placement = list(self.__initPlacement)
+        self.placement = defaultBoardPlacement
         
         # Side to move : 0 - not defined, 1 - white, 2 - black
         self.colorToMove = 0
