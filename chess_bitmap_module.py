@@ -3,27 +3,29 @@ from const_variable import *
 # bit rotate operation
 
 
-def rotateLeft(bitmap: int, offset: int):
-    return ((bitmap << offset) | (bitmap >> (64 - offset))) if (offset > 0) else ((bitmap >> -offset) | (bitmap << (64 + offset)))
+def rotateLeft64int(bitmap: int, offset: int):
+    # precondition: offset is in range -64..64
+    return ((bitmap << offset) | (bitmap >> (64 - offset))) if (offset > 0) \
+        else ((bitmap >> -offset) | (bitmap << (64 + offset)))
 
 
 # ray-movement
 
 
-def occludedFill(result: int, passible: int, dir8: int = -1) -> int:
+def occludedFill(pieces: int, possibleSqures: int, dir8: int = -1) -> int:
     if dir8 == -1:
         raise ValueError('dir8 should be assigned')
 
     offset = move_shift[dir8]
-    passible &= avoidWrap[dir8]
+    possibleSqures &= avoidWrap[dir8]
 
-    result |= passible & rotateLeft(result, offset)
-    passible &= rotateLeft(passible, offset)
-    result |= passible & rotateLeft(result, offset << 1)
-    passible &= rotateLeft(passible, offset << 1)
-    result |= passible & rotateLeft(result, offset << 2)
+    pieces |= possibleSqures & rotateLeft64int(pieces, offset)
+    possibleSqures &= rotateLeft64int(possibleSqures, offset)
+    pieces |= possibleSqures & rotateLeft64int(pieces, offset << 1)
+    possibleSqures &= rotateLeft64int(possibleSqures, offset << 1)
+    pieces |= possibleSqures & rotateLeft64int(pieces, offset << 2)
 
-    return result
+    return pieces
 
 
 # one step functions
@@ -148,11 +150,11 @@ for position in range(64):
         kingMoveSqures[position].append(position + 1)
     if position >> 3 != 0:
         upperKingMoveSqures \
-            = [[basePosition - 8] for basePosition in kingMoveSqures[position]]
+            = [basePosition - 8 for basePosition in kingMoveSqures[position]]
         kingMoveSqures[position].extend(upperKingMoveSqures)
     if position >> 3 != 7:
         lowerKingMoveSqures \
-            = [[basePosition + 8] for basePosition in kingMoveSqures[position]]
+            = [basePosition + 8 for basePosition in kingMoveSqures[position]]
         kingMoveSqures[position].extend(lowerKingMoveSqures)
     kingMoveSqures[position].remove(position)
 
@@ -325,7 +327,7 @@ def getKingAttacks(notSamecolored: int, square: int):
     return KingAttacks[square] & notSamecolored
 
 
-def pinnedPieces(bitBoardSet: int, occupied: int, squareOfKing: int, isBlack: int):
+def pinnedPieces(bitBoardSet: list, occupied: int, squareOfKing: int, isBlack: int):
     # if color is same, absoluted pins
     # if color is different, discovered checkers
 
@@ -361,7 +363,7 @@ def pinnedPieces(bitBoardSet: int, occupied: int, squareOfKing: int, isBlack: in
     return result
 
 
-def getAttackers(bitBoardSet: list[int], square: int, attackerColor: int):
+def getAttackers(bitBoardSet: list, square: int, attackerColor: int):
     # get all attackers
     # return bitboard of all attackers
     # attackerColor : 1 or 2
@@ -385,7 +387,7 @@ def getAttackers(bitBoardSet: list[int], square: int, attackerColor: int):
     return result & bitBoardSet[attackerColor]
 
 
-def possibleMove(bitBoardSet: list[int], board: list[int], currentPosition: int, nextPosition: int, moveColor: int):
+def possibleMove(bitBoardSet: list, board: list, currentPosition: int, nextPosition: int, moveColor: int):
     if currentPosition >> 6:
         raise ValueError("currentPos is out of range")
     if nextPosition >> 6:
@@ -427,7 +429,7 @@ def possibleMove(bitBoardSet: list[int], board: list[int], currentPosition: int,
             & getKingAttacks(bitBoardSet[nEmpty] | bitBoardSet[0x4 >> colorType], fromSquare)
 
 
-def moveWithoutTest(bitBoardSet: list[int], currentPosition: int, nextPosition: int, colorType: int, pieceType: int, cpieceType: int = None):
+def moveWithoutTest(bitBoardSet: list, currentPosition: int, nextPosition: int, colorType: int, pieceType: int, cpieceType: int = None):
     # https://www.chessprogramming.org/General_Setwise_Operations#Intersection
     # colorType : 1 or 2
     if colorType >> 1:
