@@ -46,22 +46,24 @@ defaultBoardPlacement = {
 # it corresponds to each direction and move_shift
 
 
-avoidWrap = {
+avoidWrap = [
+    0x7f7f7f7f7f7f7f00,
     0xffffffffffffff00,
     0xfefefefefefefe00,
     0xfefefefefefefefe,
     0x00fefefefefefefe,
     0x00ffffffffffffff,
     0x007f7f7f7f7f7f7f,
-    0x7f7f7f7f7f7f7f7f,
-    0x7f7f7f7f7f7f7f00
-}
+    0x7f7f7f7f7f7f7f7f
+]
 
 # bitBoardSetIndex
 # : [ anywhite, anyblack, // pawn, knight, bishop, rook, queen, king, // antPieces, emptySquare ]
 nWhite, nBlack, nPawn, nKnight, nBishop, nRook, nQueen, nKing, nPiece, nEmpty \
     = range(10)
 
+bitBoardSetIndexNames = ["nWhite", "nBlack", "nPawn", "nKnight",
+                         "nBishop", "nRook", "nQueen", "nKing", "nPiece", "nEmpty"]
 
 # initial boards
 # Mapping direction : Little-Endian Rank-File Mapping
