@@ -1,17 +1,19 @@
 from const_variable import *
 
 
-def convertBoard2Bitmaps(board: list) -> list:
+# convert function
+
+def convertBoard2BitBoardSet(board: list[int]) -> list[int]:
     """
     convert board to bitmaps.\n
     return list of bitboards.
 
     Args:
-        board (list(int)) : \n
+        board (list(int)): \n
             pieces placement on board.
 
     Returns:
-        bitmaps (list(int)) : \n
+        bitmaps (list(int)): \n
             list of bitboards that represent pieces placement on board.\n 
             bitBoardSet Index -
             [ anywhite, anyblack,
@@ -44,6 +46,19 @@ def convertBoard2Bitmaps(board: list) -> list:
     return bitBoardSet
 
 
+def convertBitmaps2Board(bitBoardSet: list[int]) -> list[int]:
+    board = [empty for _ in range(64)]
+
+    for bitBoardIndex in range(8):
+        bitBoard = bitBoardSet[bitBoardIndex]
+
+        for rank in range(8):
+            for file in range(8):
+                if bitBoard & (1 << (56 - (8 * rank) + file)):
+                    board[(8 * rank) + file] += (1 << bitBoardIndex)
+
+    return board
+
 
 # bit rotate operation
 
@@ -52,9 +67,9 @@ def rotateLeft64int(bitmap: int, offset: int) -> int:
     rotate left 64bit integer bitmap by offset.\n
 
     Args:
-        bitmap (int) : \n
+        bitmap (int): \n
             64bit integer bitmap to rotate.
-        offset (int) : \n
+        offset (int): \n
             offset to rotate bitmap.\n
             precondition: offset is in range -64..64.
 
@@ -77,16 +92,16 @@ def occludedFill(pieces: int, possibleSqures: int, dir8: int) -> int:
     until blocked by any other pieces. 
 
     Args:
-        pieces (int) : \n
+        pieces (int): \n
             positions of piece to slide.
-        possibleSqures (int) : \n
+        possibleSqures (int): \n
             empty squares.
             possible squares to fill.
-        dir8 (int) : \n
+        dir8 (int): \n
             direction to slide.
 
     Returns:
-        bitmap (int) : \n
+        bitmap (int): \n
             filled squares from positions of pieces by sliding to 'dir8' direction
     """
 
@@ -287,11 +302,11 @@ def popCount(bitBoard: int) -> int:
     return number of '1' in int64(bitBoard)
 
     Args:
-        bitBoard (int) : \n
+        bitBoard (int): \n
             int64 to count
 
     Returns:
-        int : \n
+        int: \n
             number of '1' in int64(bitBoard)
     """
     # count each 2bit
@@ -316,22 +331,22 @@ def popCount(bitBoard: int) -> int:
 def bitScanForward(bitBoard: int) -> int:
     """
     index(0..63) of least significant one bit of bitBoard
-    
-    Raises:
-        ValueError : \n
-            bitBoard is zero
 
     Args:
-        bitBoard (int) : \n
+        bitBoard (int): \n
             bitboard to scan
             precondition: bitBoard != 0
+    
+    Raises:
+        ValueError: \n
+            bitBoard is zero
 
     Returns:
-        LS1B (int) : \n
+        LS1B (int): \n
             index(0..63) of least significant one bit
     """
     if bitBoard == 0:
-        raise ValueError('{__myname__} : bitBoard is zero')
+        raise ValueError('{__myname__}: bitBoard is zero')
 
     return (popCount((bitBoard & -bitBoard) - 1))
 
@@ -352,23 +367,23 @@ def bitScanReverse(bitBoard: int) -> int:
     """
     index(0..63) of most significant one bit of bitBoard
     @authors Kim Walisch, Mark Dickinson
-    
-    Raises:
-        ValueError : \n
-            bitBoard is zero
 
     Args:
-        bitBoard (int) : \n
+        bitBoard (int): \n
             bitboard to scan
             precondition: bitBoard != 0
+    
+    Raises:
+        ValueError: \n
+            bitBoard is zero
 
     Returns:
-        MS1B (int) : \n
+        MS1B (int): \n
             index(0..63) of most significant one bit
     """
 
     if bitBoard == 0:
-        raise ValueError('{__myname__} : bitBoard is zero')
+        raise ValueError('{__myname__}: bitBoard is zero')
 
     bitBoard |= bitBoard >> 1
     bitBoard |= bitBoard >> 2
@@ -388,18 +403,18 @@ def bitScan(bitBoard: int, reverse: bool) -> int:
     generalized bitScan that include forward and reverse bitScan.
     @author Gerd Isenberg
 
-    Raises:
-        ValueError : \n
-            bitBoard is zero. (implemented in inner function)
-
     Args:
-        bitBoard (int) : \n
+        bitBoard (int): \n
             int64 bitBoard to bitScan
-        reverse (bool) : \n
+        reverse (bool): \n
             reverse bitScan if True, forward bitScan if False
 
+    Raises:
+        ValueError: \n
+            bitBoard is zero. (implemented in inner function)
+
     Returns:
-        LS1B/MS1B (int) : \n
+        LS1B/MS1B (int): \n
             index (0..63) of least/most significant one bit
     """
 
@@ -421,15 +436,15 @@ def getRayProtected(occupied: int, direction: int, square: int) -> int:
     return bitmap that are protected by blocker from 'direction' attack from 'square'.
 
     Args:
-        occupied (int) : \n
+        occupied (int): \n
             bitmap of any pieces
-        direction (int) : \n
+        direction (int): \n
             direction of attack
-        square (int) : \n
+        square (int): \n
             position of attacker
 
     Returns:
-        bitmap (int) : \n
+        bitmap (int): \n
             bitmap that are protected by blocker
     """
 
@@ -450,15 +465,15 @@ def getRayAttacks(occupied: int, direction: int, square: int) -> int:
     therefore, blocker could be same color as attacker.
     
     Args:
-        occupied (int) : \n
+        occupied (int): \n
             bitmap of any pieces
-        direction (int) : \n
+        direction (int): \n
             direction of attack
-        square (int) : \n
+        square (int): \n
             position of attacker
 
     Returns:
-        bitmap (int) : \n
+        bitmap (int): \n
             bitmap that able to attack from square by 'direction'.
     """
 
@@ -472,25 +487,25 @@ def getPawnForward(emptied: int, square: int, isBlack: int) -> int:
     """
     return bitmap of possible forward movement of pawn for square
 
-    Raises:
-        ValueError : \n
-            square/isBlack is out of range
-
     Args:
-        emptied (int) : \n
+        emptied (int): \n
             bitmap of empty squares
-        square (int) : \n
+        square (int): \n
             position of pawn
         isBlack (int): \n
             if True, black pawn, if False, white pawn
 
+    Raises:
+        ValueError: \n
+            square/isBlack is out of range
+
     Returns:
-        bitmap (int) : \n
+        bitmap (int): \n
             bitmap of possible forward movement of pawn
     """
 
     if square >> 6 or isBlack >> 1:
-        raise ValueError('{__myname__} : square/isBlack is out of range')
+        raise ValueError('{__myname__}: square/isBlack is out of range')
 
     # one Forward
     oneforward = emptied\
@@ -507,25 +522,25 @@ def getPawnAttacks(occupied: int, square: int, isBlack: int):
     """
     return bitmap of possible attack of pawn for square
 
-    Raises:
-        ValueError : \n
-            square/isBlack is out of range
-
     Args:
-        occupied (int) : \n
+        occupied (int): \n
             bitmap of any pieces
-        square (int) : \n
+        square (int): \n
             position of pawn
         isBlack (int): \n
             if True, black pawn, if False, white pawn
 
+    Raises:
+        ValueError: \n
+            square/isBlack is out of range
+
     Returns:
-        bitmap (int) : \n
+        bitmap (int): \n
             bitmap of possible attack of pawn
     """
 
     if square >> 6 or isBlack >> 1:
-        raise ValueError('{__myname__} : square/isBlack is out of range')
+        raise ValueError('{__myname__}: square/isBlack is out of range')
 
     forwardMask \
         = (0x01400140000000000000 >> (63 - square)) \
@@ -541,13 +556,13 @@ def getKnightAttacks(notSamecolored: int, square: int) -> int:
     get bitmap of knight attacks for square
 
     Args:
-        notSamecolored (int) : \n
+        notSamecolored (int): \n
             bitmap of not same colored pieces, include empty squares
         square (int): \n
             position of knight
 
     Returns:
-        bitmap : \n
+        bitmap: \n
             bitmap of possible knight attacks for square
     """
 
@@ -559,11 +574,11 @@ def getKnightsAttacks(knights: int) -> int:
     return bitmap of possible multiple knight attacks for square
 
     Args:
-        knights (int) : \n
+        knights (int): \n
             positions of knights
 
     Returns:
-        bitmap : \n
+        bitmap: \n
             position of possible multiple knight attacks for square
     """
 
@@ -591,7 +606,7 @@ def getBishopAttacks(occupied: int, square: int) -> int:
             position of bishop
 
     Returns:
-        bitmap : \n
+        bitmap: \n
             bitmap of possible bishop attacks for square
     """
 
@@ -617,7 +632,7 @@ def getRookAttacks(occupied: int, square: int):
             position of rook
 
     Returns:
-        bitmap : \n
+        bitmap: \n
             bitmap of possible rook attacks for square
     """
 
@@ -643,7 +658,7 @@ def getQueenAttacks(occupied: int, square: int):
             position of queen
 
     Returns:
-        bitmap : \n
+        bitmap: \n
             bitmap of possible queen attacks for square
     """
 
@@ -660,41 +675,73 @@ def getKingAttacks(notSamecolored: int, square: int):
     get bitmap of king attacks for square
 
     Args:
-        notSamecolored (int) : \n
+        notSamecolored (int): \n
             bitmap of not same colored pieces, include empty squares
         square (int): \n
             position of king
 
     Returns:
-        bitmap : \n
+        bitmap: \n
             bitmap of possible king attacks for square
     """
 
     return KingAttacks[square] & notSamecolored
 
 
-def pinnedPieces(bitBoardSet: list, colorOfKing: int):
-    """_summary_
+def getKingSquare(bitBoardSet: list, colorOfKing: int) -> int:
+    """
+    return square of king for colorOfKing.
 
     Args:
-        bitBoardSet (list): _description_
-        colorOfKing (int): _description_
+        bitBoardSet (list): \n
+            list of bitboards that represent pieces placement on board.
+        colorOfKing (int): \n
+            color of king for getting square. 1, 2
+
+    Raises:
+        ValueError: \n
+            colorOfKing is out of range
 
     Returns:
-        _type_: _description_
+        squareIndex: \n
+            square of king for colorOfKing
     """
-    # colorOfKing : color of king for getting pinned pieces
-    #
-    # if color is same, absoluted pins
-    # if color is different, discovered checkers
+    if (colorOfKing - 1) >> 1:
+        raise ValueError("colorOfKing is out of range")
 
-    #
-    squareOfKing \
-        = bitScanForward(bitBoardSet[nKing]
-                         & bitBoardSet[colorOfKing - 1])
+    # white, black -> nWhite, nBlack
+    colorOfKing >>= 1
+
+    if (bitBoardSet[nKing] & bitBoardSet[colorOfKing]) == 0:
+        raise ValueError(f"there is no king")
+
+    return bitScanForward(bitBoardSet[nKing] & bitBoardSet[colorOfKing])
+
+
+def pinnedPieces(bitBoardSet: list, colorOfKing: int) -> int:
+    """
+    return bitmap of pinned pieces.
+    if color is same, absoluted pins.
+    if color is different, discovered checkers.
+    
+    Args:
+        bitBoardSet (list): \n
+            list of bitboards that represent pieces placement on board.\n
+        colorOfKing (int): \n
+            color of king for getting pinned pieces. 1, 2
+
+    Returns:
+        bitmap: \n
+            bitmap of pinned pieces
+    """
+    # raise
+    if (colorOfKing - 1) >> 1:
+        raise ValueError("colorOfKing is out of range")
+
+    # variables
+    squareOfKing = getKingSquare(bitBoardSet, colorOfKing)
 
     oppColor = 2 - colorOfKing
-
     oppositeBQ \
         = (bitBoardSet[nBishop] | bitBoardSet[nQueen]) \
         & bitBoardSet[oppColor]
@@ -706,33 +753,65 @@ def pinnedPieces(bitBoardSet: list, colorOfKing: int):
 
     result = 0x0000000000000000
 
-    #
+    # check for bishop and queen
     for direction in range(0, 8, 2):
-        result \
-            |= getRayAttacks(nPieceBB,
-                             direction,
-                             squareOfKing) \
-            & getRayAttacks(nPieceBB,
-                            (direction + 4) & 0x7,
-                            bitScan(rayAttacks[direction][squareOfKing] & oppositeBQ, direction >> 2))
+        # variable
+        oppositeBQAttackers = rayAttacks[direction][squareOfKing] & oppositeBQ
 
-    for direction in range(1, 8, 2):
+        # process
+        if oppositeBQAttackers == 0:
+            continue
+
         result \
-            |= getRayAttacks(nPieceBB,
+            |= (getRayAttacks(nPieceBB,
                              direction,
                              squareOfKing) \
             & getRayAttacks(nPieceBB,
                             (direction + 4) & 0x7,
-                            bitScan(rayAttacks[direction][squareOfKing] & oppositeRQ, direction >> 2))
+                            bitScan(oppositeBQAttackers, direction >> 2)))
+
+    # check for rook and queen
+    for direction in range(1, 8, 2):
+        # variable
+        oppositeRQAttackers = rayAttacks[direction][squareOfKing] & oppositeRQ
+
+        # process
+        if oppositeRQAttackers == 0:
+            continue
+
+        result \
+            |= (getRayAttacks(nPieceBB,
+                             direction,
+                             squareOfKing) \
+            & getRayAttacks(nPieceBB,
+                            (direction + 4) & 0x7,
+                            bitScan(oppositeRQAttackers, direction >> 2)))
 
     return result
 
 
-def getAttackers(bitBoardSet: list, square: int, attackerColor: int):
-    # get all attackers
-    # return bitboard of all attackers
-    # attackerColor : 1 or 2
-    if attackerColor >> 2:
+def getAttackers(bitBoardSet: list, square: int, attackerColor: int) -> int:
+    """
+    get all attackers that are able to attack the square.
+
+    Args:
+        bitBoardSet (list): \n
+            list of bitboards that represent pieces placement on board.
+        square (int): \n
+            position of square that is being attacked.
+        attackerColor (int): \n
+            color of attackers.
+
+    Raises:
+        ValueError: \n
+            attackerColor is out of range
+
+    Returns:
+        bitmap: \n
+            bitmap of all attackers
+    """
+
+    if (attackerColor - 1) >> 1:
         raise ValueError('attackerColor is out of range')
 
     attackerColor >>= 1
@@ -749,60 +828,161 @@ def getAttackers(bitBoardSet: list, square: int, attackerColor: int):
                & bitBoardSet[nQueen])
     result |= (getKingAttacks(bitBoardSet[nPiece], square)
                & bitBoardSet[nKing])
+
     return result & bitBoardSet[attackerColor]
 
 
-def possibleMove(bitBoardSet: list, board: list, currentPosition: int, nextPosition: int, moveColor: int):
+def getCheckAttackers(bitBoardSet: list, colorOfKing: int) -> int:
+    """
+    get all attackers that are able to attack the king.
+
+    Args:
+        bitBoardSet (list): \n
+            list of bitboards that represent pieces placement on board.
+        colorOfKing (int): \n
+            color of king for getting attackers. 1, 2
+
+    Returns:
+        bitmap: \n
+            bitmap of all checkers
+    """
+    return getAttackers(bitBoardSet, getKingSquare(bitBoardSet, colorOfKing), 2 - colorOfKing)
+
+
+def possibleMove(bitBoardSet: list, board: list, currentPosition: int, sideToMove: int = 0) -> int:
+    """
+    get bitmap of possible movement for piece on currentPosition.
+
+    Args:
+        bitBoardSet (list): \n
+            list of bitboards that represent pieces placement on board.
+        board (list): \n
+            pieces placement on board.
+        currentPosition (int): \n
+            position of piece that is being moved.
+        sideToMove (int): \n
+            side to move. default is 0. 0 - none, 1 - white, 2 - black
+
+    Raises:
+        ValueError: \n
+            currentPosition is out of range.
+
+    Returns:
+        bitmap: \n
+            bitmap of possible movement for piece on currentPosition.
+    """
+    # raise
     if currentPosition >> 6:
         raise ValueError("currentPos is out of range")
-    if nextPosition >> 6:
-        raise ValueError("nextPos is out of range")
 
-    fromSquare = board[currentPosition]
-    toSquare = board[nextPosition]
+    # exception handling
+    if bitBoardSet[nEmpty] & (1 << currentPosition):
+        return 0x0
+    if sideToMove and (bitBoardSet[0x4 >> sideToMove] & (1 << currentPosition)):
+        return 0x0
 
-    pieceType = fromSquare % 0xfc
-    colorType = fromSquare % 0x3
+    # variables
+    boardIndex \
+        = (8*(7 - ((currentPosition >> 3) & 0b111))) \
+        + (currentPosition & 0b111)
+    fromSquare = board[boardIndex]
+
+    pieceType = fromSquare & 0b11111100
+    colorType = fromSquare & 0b00000011
     oppColorType = 0x4 >> colorType
 
+    # white, black -> nWhite, nBlack
+    colorType >>= 1
+    oppColorType >>= 1
+
+    possibleSquares = (bitBoardSet[nEmpty] | bitBoardSet[oppColorType])
+
+    # process
     if pieceType == empty:
         return 0x0
 
-    if pieceType == (1 << nPawn):
-        return getPawnAttacks(bitBoardSet[nPiece], fromSquare, colorType >> 1) \
-            | getPawnForward(bitBoardSet[nEmpty], fromSquare, colorType >> 1)
+    if (pinnedPieces(bitBoardSet, colorType + 1) & (1 << currentPosition)):
+        direction = 0
+        kingPosition = bitScan(
+            bitBoardSet[nKing] & bitBoardSet[colorType], False)
 
-    if pieceType == (1 << nKnight):
-        return getKnightAttacks(bitBoardSet[nEmpty] | bitBoardSet[oppColorType], fromSquare)
+        if kingPosition > currentPosition:
+            direction = 4
+            distance = kingPosition - currentPosition
+        else:
+            distance = currentPosition - kingPosition
 
-    if pieceType == (1 << nBishop):
-        return getBishopAttacks(bitBoardSet[oppColorType], fromSquare)
+        if (distance & 0b000111) == 0:
+            direction += 1
+        elif (distance & 0b111000) == 0:
+            direction += 3
+        elif ((distance & 0b111000) >> 3) == (distance & 0b000111):
+            direction += 2
 
-    if pieceType == (1 << nRook):
-        return getRookAttacks(bitBoardSet[oppColorType], fromSquare)
+        possibleSquares \
+            = getRayAttacks(bitBoardSet[nPiece] ^ (1 << currentPosition),
+                            direction,
+                            kingPosition) \
+            ^ (1 << currentPosition)
 
-    if pieceType == (1 << nQueen):
-        return getQueenAttacks(bitBoardSet[oppColorType], fromSquare)
+    if pieceType == pawn:
+        return possibleSquares & (getPawnAttacks(bitBoardSet[nPiece], currentPosition, colorType)
+                                  | getPawnForward(bitBoardSet[nEmpty], currentPosition, colorType))
 
-    if pieceType == (1 << nKing):
-        safeSquare = kingMoveSqures[currentPosition]
+    if pieceType == knight:
+        return possibleSquares & getKnightAttacks(bitBoardSet[nEmpty] | bitBoardSet[oppColorType], currentPosition)
+
+    if pieceType == bishop:
+        return possibleSquares & getBishopAttacks(bitBoardSet[nPiece], currentPosition)
+
+    if pieceType == rook:
+        return possibleSquares & getRookAttacks(bitBoardSet[nPiece], currentPosition)
+
+    if pieceType == queen:
+        return possibleSquares & getQueenAttacks(bitBoardSet[nPiece], currentPosition)
+
+    if pieceType == king:
+        safeSquare = KingAttacks[currentPosition]
+
         for possibleMove in kingMoveSqures[currentPosition]:
             if getAttackers(bitBoardSet, possibleMove, oppColorType):
-                safeSquare ^= 1 << possibleMove
+                safeSquare ^= (1 << possibleMove)
 
-        return safeSquare \
-            & getKingAttacks(bitBoardSet[nEmpty] | bitBoardSet[0x4 >> colorType], fromSquare)
+        return safeSquare & getKingAttacks(bitBoardSet[nEmpty] | bitBoardSet[oppColorType], currentPosition)
 
 
-def moveWithoutTest(bitBoardSet: list, currentPosition: int, nextPosition: int, colorType: int, pieceType: int, cpieceType: int = None):
+def possibleMoveList(bitBoardSet: list, board: list, sideToMove: int) -> list:
+    moveList = []
+
+    for currentPos in range(63, -1, -1):
+        possibleMoveBB = possibleMove(
+            bitBoardSet, board, currentPos, sideToMove)
+        for _ in range(64):
+            if possibleMoveBB:
+                squareIndex = bitScan(possibleMoveBB, False)
+                moveList.append((currentPos, squareIndex))
+                possibleMoveBB &= (possibleMoveBB - 1)
+                continue
+            break
+
+    return moveList
+
+
+def IsLegalMove(bitBoardSet: list, board: list, currentPosition: int, nextPosition: int) -> bool:
+    if possibleMove(bitBoardSet, board, currentPosition) & (1 << nextPosition):
+        return True
+    return False
+
+
+def moveWithoutTest(bitBoardSet: list, currentPosition: int, nextPosition: int, colorType: int, pieceType: int, cpieceType: int = 0):
     # https://www.chessprogramming.org/General_Setwise_Operations#Intersection
-    # colorType : 1 or 2
+    # colorType: 1 or 2
     if colorType >> 1:
         raise ValueError('colorType is out of range')
-    # pieceType : 2 ~ 7
+    # pieceType: 2 ~ 7
     if (pieceType >> 1) == 0 or pieceType >> 3:
         raise ValueError('pieceType is out of range')
-    # currentPosition, nextPosition : 0 ~ 63
+    # currentPosition, nextPosition: 0 ~ 63
     if currentPosition >> 6 or nextPosition >> 6:
         raise ValueError('some position is out of range')
 
@@ -822,4 +1002,14 @@ def moveWithoutTest(bitBoardSet: list, currentPosition: int, nextPosition: int, 
 
     bitBoardSet[nEmpty] ^= fromToBB
     bitBoardSet[nPiece] ^= fromToBB
-    return
+
+    return bitBoardSet
+
+
+def makeMove(bitBoardSet: int, board: int, currentPostion: int, nextPostion: int, castling: int = 4):
+    # variables
+    colorType = (board[currentPostion] & 0b00000011) >> 1
+    pieceType = pieceTypesToBBIndex[(board[currentPostion] & 0b11111100) >> 2]
+    cpieceType = pieceTypesToBBIndex[(board[nextPostion] & 0b11111100) >> 2]
+
+    return moveWithoutTest(bitBoardSet, currentPostion, nextPostion, colorType, pieceType, cpieceType)

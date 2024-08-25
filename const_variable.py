@@ -22,7 +22,7 @@ white, black = colors
 pieceTypes = [1 << shift for shift in range(2, 8)]
 pawn, knight, bishop, rook, queen, king = pieceTypes
 
-pieceLiteral = ("P", "R", "N", "B", "Q", "K")
+pieceLiteral = ("P", "N", "B", "R", "Q", "K")
 
 defaultBoardPlacement = {
     black + rook, black + knight, black + bishop, black +
@@ -64,6 +64,10 @@ nWhite, nBlack, nPawn, nKnight, nBishop, nRook, nQueen, nKing, nPiece, nEmpty \
 
 bitBoardSetIndexNames = ["nWhite", "nBlack", "nPawn", "nKnight",
                          "nBishop", "nRook", "nQueen", "nKing", "nPiece", "nEmpty"]
+pieceTypesToBBIndex = [9, 2, 3, 9, 4, 9, 9, 9,
+                       5, 9, 9, 9, 9, 9, 9, 9,
+                       6, 9, 9, 9, 9, 9, 9, 9,
+                       9, 9, 9, 9, 9, 9, 9, 9, 7]
 
 # initial boards
 # Mapping direction : Little-Endian Rank-File Mapping

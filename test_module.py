@@ -1,36 +1,12 @@
 import unittest
 import random
+from printing_chessboard import *
 
 # module that needs to be tested
 
 from chess_bitmap_module import *
 
 # module test
-
-
-def getBitBoardString(board: int) -> str:
-    s = ""
-    for rank in range(8):
-        for file in range(8):
-            s += "1 " if board & (0x1 << (56 - 8 * rank + file)) else ". "
-        s += "\n"
-    return s
-
-
-def getBitBoardSetString(bitBoardSet: list) -> str:
-    s = "\n"
-    for BBSetIndex in range(10):
-        s += f"{bitBoardSetIndexNames[BBSetIndex]} : \n"
-        s += getBitBoardString(bitBoardSet[BBSetIndex])
-    return s
-
-
-def printBitBoard(board: int):
-    for rank in range(8):
-        for file in range(8):
-            print("1" if board & (0x1 << (56 - 8 * rank + file)) else "0", end="")
-        print()
-    print()
 
 class BitBoardTest(unittest.TestCase):
     def test_rotateLeft64int(self):
@@ -113,9 +89,9 @@ class BitBoardTest(unittest.TestCase):
                            for length in range(6)]
 
         for length in range(6):
-            self.assertEqual(getRayBlocks((random_int_list[length] << (55 - length * 9)) | (0x1 << (54 - length * 9)), NoEa, 0),
+            self.assertEqual(getRayProtected((random_int_list[length] << (55 - length * 9)) | (0x1 << (54 - length * 9)), NoEa, 0),
                              rayAttacks[NoEa][54 - length * 9])
-            self.assertEqual(getRayBlocks(random_int_list[length] | (0x1 << (9 + length * 9)), SoWe, 63),
+            self.assertEqual(getRayProtected(random_int_list[length] | (0x1 << (9 + length * 9)), SoWe, 63),
                              rayAttacks[SoWe][9 + length * 9])
 
     def test_getPawnForward(self):
@@ -250,14 +226,14 @@ class BitBoardTest(unittest.TestCase):
             rook,     empty,          empty,          empty
         ]
 
-        baseTestBBs = convertBoard2Bitmaps(baseTestBoard)
+        baseTestBBs = convertBoard2BitBoardSet(baseTestBoard)
 
         for _ in range(64):
             random_offset = random.randint(0, 3) + (random.randint(0, 3) << 3)
             testBBs = [rotateLeft64int(baseTestBBs[i], random_offset)
                        for i in range(10)]
 
-            first = pinnedPieces(testBBs, 18 + random_offset, 0)
+            first = pinnedPieces(testBBs, white)
             second = 0x06080600 << random_offset
 
             self.assertEqual(first, second,
@@ -266,10 +242,117 @@ class BitBoardTest(unittest.TestCase):
                             \n second : \n{getBitBoardString(second)}\
                             \n bitboard : {getBitBoardSetString(testBBs)}")
 
+    def test_getAttackers(self):
+        baseTestBoard = [
+            empty,          empty,          empty,          empty,          empty,          empty,          empty,          empty,
+            empty,          empty,          empty,          empty,          empty,          empty,          empty,          empty,
+            empty,          empty,          empty,          empty,          empty,          empty,          empty,          empty,
+            white + bishop, empty,          white + queen,  empty,          black +
+            bishop, empty,          empty,          empty,
+            empty,          empty,          empty,          empty,          empty,          empty,          empty,          empty,
+            white + rook,   white + knight, empty,          black +
+            knight, black + rook,   empty,          empty,          empty,
+            empty,          white + pawn,    empty,          black +
+            pawn,   empty,          empty,          empty,          empty,
+            empty,          white + knight, black + queen,  black +
+            knight, empty,          empty,          empty,          empty
+        ]
 
+        baseTestBBs = convertBoard2BitBoardSet(baseTestBoard)
 
+        for _ in range(8):
+            random_offset = random.randint(0, 3) + (random.randint(0, 3) << 3)
+            testBBs = [rotateLeft64int(baseTestBBs[i], random_offset)
+                       for i in range(10)]
 
+            first = getAttackers(testBBs, 18 + random_offset, black)
+            second = 0x000000100000080c << random_offset
 
+            self.assertEqual(first, second,
+                             f"\nsquare : {18 + random_offset}\
+                            \n first : \n{getBitBoardString(first)}\
+                            \n second : \n{getBitBoardString(second)}\
+                            \n bitboard : {getBitBoardSetString(testBBs)}")
+
+    def test_possibleMove(self):
+        # base data for generating test suite
+        baseTestBoard = [
+            empty,          empty,          empty,          empty,          empty,          empty,          empty,          empty,
+            empty,          empty,          empty,          empty,          empty,          empty,          empty,          empty,
+            empty,          empty,          empty,          empty,          empty,          empty,          empty,          empty,
+            black + bishop, empty,          empty,          empty,          black +
+            rook,   empty,          empty,          empty,
+            empty,          empty,          empty,          empty,          empty,          empty,          empty,          empty,
+            empty,          black + king,   white + bishop, empty,          white +
+            bishop, empty,          empty,          empty,
+            empty,          empty,          empty,          empty,          empty,          empty,          empty,          empty,
+            black + queen,  empty,          white + rook,   empty,          white +
+            king,   empty,          empty,          empty
+        ]
+        baseTestBBs = convertBoard2BitBoardSet(baseTestBoard)
+        baseTestSquares = [18, 2, 36, 0]
+        baseTestResult = [0x0000000102000800, 0x000000000000000b,
+                          0x0000000e10100000, 0x0000000001050306]
+
+        for _ in range(16):
+            random_offset = random.randint(0, 3) + (random.randint(0, 3) << 3)
+
+            # test suite
+            testBBs = [rotateLeft64int(baseTestBBs[i], random_offset)
+                       for i in range(10)]
+            testBoard = []
+            testResult = [baseTestResult[i] << random_offset for i in range(4)]
+            testResult[2] |= (getRayAttacks(0x0, 1,
+                                            (baseTestSquares[2] + random_offset)))
+            testResult[2] |= (getRayAttacks(0x0, 3,
+                                            (baseTestSquares[2] + random_offset)))
+            testResult[3] |= (getRayAttacks(0x0, 0,
+                                            (baseTestSquares[3] + random_offset)))
+            testResult[3] |= (getRayAttacks(0x0, 4,
+                                            (baseTestSquares[3] + random_offset)))
+            testResult[3] |= (getRayAttacks(0x0, 5,
+                                            (baseTestSquares[3] + random_offset)))
+            testResult[3] |= (getRayAttacks(0x0, 6,
+                                            (baseTestSquares[3] + random_offset)))
+            testResult[3] |= (getRayAttacks(0x0, 7,
+                                            (baseTestSquares[3] + random_offset)))
+            # get testBoard
+            for rank in range(7, -1, -1):
+                for file in range(8):
+                    index = 8 * rank + file
+                    piece = empty
+
+                    if testBBs[nEmpty] & (1 << index):
+                        testBoard.append(piece)
+                        continue
+
+                    for color in range(2):
+                        if testBBs[color] & (1 << index):
+                            piece = (1 << color)
+                            break
+
+                    for pieceType in range(2, 8):
+                        if testBBs[pieceType] & (1 << index):
+                            piece |= (1 << pieceType)
+                            break
+
+                    testBoard.append(piece)
+
+            for i in range(4):
+                # args
+                currentPosition = baseTestSquares[i] + random_offset
+                first = possibleMove(testBBs,
+                                     testBoard,
+                                     currentPosition)
+                second = testResult[i] & 0xffffffffffffffff
+
+                # test
+                self.assertEqual(first, second,
+                                 f"\nsquare : {baseTestSquares[i] + random_offset}\
+                                \n first : \n{getBitBoardString(first)}\
+                                \n second : \n{getBitBoardString(second)}\
+                                \n piece : \n{str(testBoard[(8*(7 - (currentPosition >> 3)) + (currentPosition & 0b111))])}\
+                                \n bitboard : \n{getBitBoardSetString(testBBs)}")
 
 
 if __name__ == '__main__':
