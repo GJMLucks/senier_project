@@ -1,27 +1,36 @@
 from const_variable import *
+
 from printing_chessboard import *
+
+from chess_module import *
 from chess_bitmap_module import *
 
+from multipledispatch import dispatch
 
+# ======== class ======== #
 class Chess():
     def __init__(self):
         # placement of pieces
-        self.board = defaultBoardPlacement
-        self.bitBoardSet = bitBoardDefaultSet
-        self.PositionsOfKings = [60, 4]
+        self.board = defaultBoardPlacement.copy()
+        self.bitBoardSet = bitBoardDefaultSet.copy()
+        self.PositionsOfKings = [4, 60] # bitBoard index
 
         # Side to move : 0 - not defined, 1 - white, 2 - black
-        self.colorToMove = 0
+        self.sideToMove = 0
+
+        # for special moves
 
         # Castling ability
         # [ white king color castling( K, h1 )
         # , white queen color castling( Q, a1 )
         # , black king color castling( k, h8 )
         # , black right castling( q, a8 ) ]
-        self.specialMoveflag = [True, True, True, True]
+        self.castlingFlags = [True, True, True, True]
 
         # en passant target square
         self.enPassantTarget = 0
+
+        #
 
         # Halfmove clock
         self.halfMoveClock = 0
@@ -29,486 +38,1007 @@ class Chess():
         # fullmove counter
         self.fullMoveCounter = 0
 
-        # [ toSquare, fromSquare, capture piece ]
-        self.previousMove = [0, 0, 0]
+        # move list for undoing
 
-        self.PositionsOfPieaceBycolor = self._PositionsOfPiecesBycolor()
+        # [ fromSquare, toSquare, colorType, moveType, capturedPiece, previousCastlingFlags ]
+        self.moveList = [Move() for _ in range(1 << 10)]
+        self.moveListCurrent = 0
+
 
     # basic oparation of chess
-    def _reset(self) -> None:
-        self.placement = list(self.__initPlacement)
+
+    def reset(self) -> None:
+        self.board = defaultBoardPlacement.copy()
+        self.bitBoardSet = bitBoardDefaultSet.copy()
+        self.PositionsOfKings = [4, 60]
+
+        self.sideToMove = white
+
+        self.castlingFlags = [True, True, True, True]
+        self.enPassantTarget = 0
+
+        self.halfMoveClock = 0
         self.fullMoveCounter = 1
-        self.colorToMove = white
 
-        self.PositionsOfPieaceBycolor = self.__placementsOfPieces
+        self.moveList = [Move() for _ in range(1 << 10)]
+        self.moveListCurrent = 0
+
         return
 
-    def _NextRound(self) -> None:
-        if self.colorToMove == white:
-            self.colorToMove = black
-            return
+    def _set(self, FEN: str) -> None:
+        # variables
+        FENList = FEN.split(" ")
+        placement = FENList[0]
+        sideToMove = FENList[1]
+        castling = FENList[2]
+        enPassant = FENList[3]
+        halfMoveClock = FENList[4]
+        fullMoveCounter = FENList[5]
 
-        self.colorToMove = black
-        self.fullMoveCounter += 1
-        return
-
-    def _Promotion(self, Position: int, piece: int) -> None:
-        if Position < 0 or Position >= 64:
-            raise ValueError("Position is out of range")
-        if (piece >> 2) not in pieceTypes or (piece & 0b11) not in colors:
-            raise ValueError("piece is not defined")
-        if self.placement[Position] == empty:
-            raise Exception("promotion target is nonexistent")
-
-        if self.placement[Position]:
-            self.placement[Position] = piece
-        return
-
-    # TODO: make mapping function
-    def _PositionsOfPiecesBycolor(self) -> list[list[int]]:
-        PositionsOfPieaceBycolor = [[], []]
-
-        for index, piece in enumerate(self.placement):
-            if piece == empty:
-                continue
-            PositionsOfPieaceBycolor[0 if (piece >> 3) == white else 1] = index
-
-        return PositionsOfPieaceBycolor
-
-    # validation check
-    def _directionOffset(self, firstPos: int, secondPos: int) -> int:
-        if firstPos == secondPos:
-            return 0
-
-        rank_dist = secondPos % 8 - firstPos % 8
-        file_dist = secondPos // 8 - firstPos // 8
-
-        # is diagonal movement?
-        if abs(file_dist) == abs(rank_dist):
-            if rank_dist > 0:
-                return 9 if file_dist > 0 else -7
-            else:
-                return 7 if file_dist > 0 else -9
-
-        # is straight movement?
-        if file_dist*rank_dist == 0:
-            if rank_dist:
-                return 1 if rank_dist > 0 else -1
-            else:
-                return 8 if file_dist > 0 else -8
-
-        return 0
-
-    def _absolutePinCheck(self, King_Pos: int, Pos: int) -> int:
-        # King_Pos  : Position of the king
-        # Pos       : Position of piece to check that it is in absolute pin
-
-        # error : return '64'
-        # if absolute pin : return 'passible Positions if exist'
-        # if not absolute pin : return '64'
-
-        piece = self.placement[Pos]
-
-        if piece == empty:
-            # print("err : _absolutePinCheck, piece is empty")
-            return 64
-
-        kingPiece = self.placement[King_Pos]
-
-        if (kingPiece & 0b11111100) != king:
-            # print("err : _absolutePinCheck, this is not king")
-            return 64
-
-        color = kingPiece & 0b00000011
-
-        if (piece & 0b00000011) != color:
-            # print("err : _absolutePinCheck, color is not same")
-            return 64
-
-        offset = self._directionOffset(King_Pos, Pos)
-
-        # is this piece in Position that able to blocking check?
-        if offset == 0:
-            return 64
-
-        # is there other piece in Position blocking check?
-        for opponentPos in range(King_Pos+offset, Pos, offset):
-            if self.placement[opponentPos] != empty:
-                return 64
-
-        result = [i for i in range(King_Pos+offset, Pos, offset)]
-
-        # is there opponent piece threatening king?
-        for opponentPos in range(Pos+offset, 64 if offset > 0 else -1, offset):
-            # termination condition by rank
-            if opponentPos < 0 or opponentPos >= 64:
+        # process
+        self.board = FENboard2board(placement)
+        self.bitBoardSet = Board2BitBoardSet(self.board)
+        self.sideToMove = white if sideToMove[0].lower == 'w' else black
+        self.halfMoveClock = int(halfMoveClock)
+        self.fullMoveCounter = int(fullMoveCounter)
+        # castlingFlags
+        for char in castling:
+            if char == '-':
+                self.castlingFlags = [False, False, False, False]
                 break
+            if char == 'K':
+                self.castlingFlags[0] = True
+            if char == 'Q':
+                self.castlingFlags[1] = True
+            if char == 'k':
+                self.castlingFlags[2] = True
+            if char == 'q':
+                self.castlingFlags[3] = True
+        # enPassantTarget
+        for char in enPassant:
+            if char == '-':
+                self.enPassantTarget = 0
+                break
+            self.enPassantTarget = algebraic2index(enPassant)
+        # PositionsOfKings
+        for index, piece in enumerate(self.board):
+            if piece & king:
+                self.PositionsOfKings[(piece & 0b11) >> 1] = index ^ 0b111000
 
-            piece = self.placement[opponentPos]
+        # reset the move list
+        self.moveList = [Move() for _ in range(1 << 10)]
+        self.moveListCurrent = 0
 
-            if piece == empty:
-                # termination condition by file
-                if (opponentPos & 0b111 == 0 or opponentPos & 0b111 == 7):
-                    break
+        return
+
+    def nextRound(self) -> None:
+        self.sideToMove = (self.sideToMove & 0b1) + 1
+        self.fullMoveCounter += 1
+
+        return
+
+    def undoRound(self) -> None:
+        self.sideToMove = (self.sideToMove & 0b1) + 1
+        self.fullMoveCounter += 1
+
+        return
+
+    # return bitmap index
+
+    def _getKingSquare(self, colorOfKing: int) -> int:
+        """
+        return square of king for colorOfKing.
+
+        Args:
+            colorOfKing (int): \n
+                color of king for getting square. 1, 2
+            
+        Raises:
+            ValueError: \n
+                colorOfKing is out of range
+            ValueError: \n
+                there is no king
+                
+        Returns:
+            squareIndex: \n
+                square of king for colorOfKing
+        """
+
+        # raises
+        if (colorOfKing - 1) >> 1:
+            raise ValueError("colorOfKing is out of range")
+        if (self.bitBoardSet[nKing] & self.bitBoardSet[colorOfKing >> 1]) == 0:
+            raise ValueError("there is no king")
+
+        return bitScanForward(self.bitBoardSet[nKing] & self.bitBoardSet[colorOfKing >> 1])
+
+    # return bitmap
+
+    def _pinnedPieces(self, colorOfKing: int) -> int:
+        """
+        return bitmap of pinned pieces.
+        if color is same, absoluted pins.
+        if color is different, discovered checkers.
+        
+        Args:
+            colorOfKing (int): \n
+                color of king for getting pinned pieces. 0, 1
+
+        Returns:
+            bitmap: \n
+                bitmap of pinned pieces
+        """
+
+        # Raise
+        if colorOfKing >> 1:
+            raise ValueError("colorOfKing is out of range")
+
+        # variables
+        squareOfKing = self.PositionsOfKings[colorOfKing]
+
+        oppColor = colorOfKing ^ 0b1
+
+        nPieceBB = self.bitBoardSet[nPiece]
+        result = 0x0000000000000000
+        
+        oppositeBQ \
+            = (self.bitBoardSet[nBishop] | self.bitBoardSet[nQueen]) \
+            & self.bitBoardSet[oppColor]
+        oppositeRQ \
+            = (self.bitBoardSet[nRook] | self.bitBoardSet[nQueen]) \
+            & self.bitBoardSet[oppColor]
+
+        # check for bishop and queen
+        for direction in range(0, 8, 2):
+            # variable
+            oppositeBQAttackers = rayAttacks[direction][squareOfKing] & oppositeBQ
+
+            #printBitMap(rayAttacks[direction][squareOfKing])
+            #printBitMap(oppositeBQ)
+
+            # process
+            if oppositeBQAttackers == 0:
+                continue
+            
+            #print(f'oppositeBQAttackers')
+            #printBitMap(oppositeBQAttackers)
+
+            result \
+                |= (getRayAttacks(nPieceBB,
+                                  direction,
+                                  squareOfKing)
+                    & getRayAttacks(nPieceBB,
+                                    (direction ^ 0b100),
+                    bitScan(oppositeBQAttackers, direction >> 2)))
+
+        # check for rook and queen
+        for direction in range(1, 8, 2):
+            # variable
+            oppositeRQAttackers = rayAttacks[direction][squareOfKing] & oppositeRQ
+
+            # process
+            if oppositeRQAttackers == 0:
                 continue
 
-            # is there other piece that is blocking check?
-            if piece & 0b00000011 == color:
-                return 64
+            result \
+                |= (getRayAttacks(nPieceBB,
+                                  direction,
+                                  squareOfKing)
+                    & getRayAttacks(nPieceBB,
+                                    (direction + 4) & 0x7,
+                    bitScan(oppositeRQAttackers, direction >> 2)))
 
-            # Covered conditions : opponent piece is in this Position
-            pieceType = piece & 0b11111100
+        return result
 
-            if (pieceType == queen) \
-                    or (pieceType == rook and (abs(offset) == 1 or abs(offset) == 8)) \
-                    or (pieceType == bishop and (abs(offset) == 7 or abs(offset) == 9)):
-                return opponentPos
+    def _getAttackers(self, square: int, attackerColor: int, moveAssumption: int = 0) -> int:
+        """
+        get all attackers that are able to attack the square.
 
-        return 64
+        Args:
+            square (int): \n
+                position of square that is being attacked.
+            attackerColor (int): \n
+                color of attackers. 0 - nWhite, 1 - nBlack. same as isBlack
+            moveAssumption (int): \n
+                moveAssumption bitmap for assumption. default is 0x0.
+        Raises:
+            ValueError: \n
+                attackerColor is out of range
 
-    def _routeCheck(self, currentPos, nextPos) -> bool:
-        if currentPos < 0 or currentPos >= 64:
+        Returns:
+            bitmap: \n
+                bitmap of all attackers
+        """
+
+        # Raise
+        if attackerColor >> 1:
+            raise ValueError('attackerColor is out of range')
+
+        nPieceBB = self.bitBoardSet[nPiece] ^ moveAssumption
+
+        # process
+        result = (getPawnAttacks(nPieceBB, square, attackerColor^0b1)
+                  & self.bitBoardSet[nPawn])
+        result |= (getKnightAttacks(nPieceBB, square)
+                   & self.bitBoardSet[nKnight])
+        result |= (getBishopAttacks(nPieceBB, square)
+                   & self.bitBoardSet[nBishop])
+        result |= (getRookAttacks(nPieceBB, square)
+                   & self.bitBoardSet[nRook])
+        result |= (getQueenAttacks(nPieceBB, square)
+                   & self.bitBoardSet[nQueen])
+        result |= (getKingAttacks(nPieceBB, square)
+                   & self.bitBoardSet[nKing])
+
+        return result & self.bitBoardSet[attackerColor]
+
+    def _getSafeMoveOfKing(self, colorOfKing: int) -> int:
+        """
+        get bitmap of safe movement for king.
+        
+        Args:
+            colorOfKing (int): \n
+                color of king for getting safe movement. 0, 1
+
+        Returns:
+            bitmap: \n
+                bitmap of safe movement for king.
+        """
+
+        # variables
+        squareOfKing = self.PositionsOfKings[colorOfKing]
+        result = KingAttacks[squareOfKing]
+
+        # process
+        for possibleSquare in kingMoveSquares[squareOfKing]:
+            moveAssumptions = (1 << possibleSquare) | (1 << squareOfKing)
+            if self._getAttackers(possibleSquare, colorOfKing^0b1, moveAssumptions):    # oppColorType : nWhite, nBlack -> white, black
+                result ^= (1 << possibleSquare)
+
+        return result & (self.bitBoardSet[nEmpty] | self.bitBoardSet[colorOfKing^0b1])
+
+    def _possibleMove(self, currentPosition: int, sideToMove: int = 0) -> int:
+        """
+        get bitmap of possible movement for piece on currentPosition.
+
+        Args:
+            currentPosition (int): \n
+                position of piece that is being moved.
+            sideToMove (int): \n
+                side to move. default is 0. 0 - none, 1 - white, 2 - black
+
+        Raises:
+            ValueError: \n
+                currentPosition is out of range.
+
+        Returns:
+            bitmap: \n
+                bitmap of possible movement for piece on currentPosition.
+        """
+
+        # raise for out of range
+        if currentPosition >> 6:
             raise ValueError("currentPos is out of range")
-        if nextPos < 0 or nextPos >= 64:
-            raise ValueError("nextPos is out of range")
 
-        offset = self._directionOffset(currentPos, nextPos)
+        curPosBB = 1 << currentPosition
 
-        # check movement is line movement
-        if offset == 0:
+        # exception handling
+        if self.bitBoardSet[nEmpty] & curPosBB:
+            return 0x0  # moving piece is nonexistent
+        if sideToMove and (self.bitBoardSet[sideToMove & 1] & curPosBB):
+            return 0x0  # moving piece is not same color with sideToMove
+        
+        # variables
+        fromSquare = self.board[currentPosition ^ 0b111000]
+        
+        pieceType = fromSquare & 0b11111100
+        colorType = fromSquare & 0b00000011
+        colorType >>= 1                 # white, black -> nWhite, nBlack
+        oppColorType = colorType ^ 0b1
+        
+        kingPosition = self.PositionsOfKings[colorType]
+
+        # mask
+        possibleSquares = (self.bitBoardSet[nEmpty]
+                           | self.bitBoardSet[oppColorType])
+
+        # raise for valid values
+        if sideToMove and colorType == (sideToMove & 1):
+            raise ValueError("sideToMove and colorType are not matched")
+        if pieceType == empty:
+            raise ValueError("board and bitbaord are not matched")
+
+        
+        # process
+
+        # first, check if king is in check
+        CheckersBB = self._getAttackers(kingPosition, oppColorType)
+        
+        if CheckersBB:
+            # safe move for king
+            if pieceType & king:
+                return self._getSafeMoveOfKing(colorType)
+            
+            # is double check?
+            if CheckersBB & (CheckersBB - 1):
+                return 0x0
+            
+            # single check : 1. king safe move 2. capture or block
+            for direction in range(8):
+                if CheckersBB & rayAttacks[direction][kingPosition]:
+                    possibleSquares &= getRayAttacks(CheckersBB, direction, kingPosition)
+                    CheckersBB = 0
+                    break
+            # if direction is nonexistent, then it is knight check
+            if CheckersBB:
+                possibleSquares = CheckersBB & knightAttacks[kingPosition]
+                
+            if possibleSquares == 0:
+                raise Exception("CheckersBB is error")
+            
+            
+        # check absolute pin case
+        if (self._pinnedPieces(colorType) & curPosBB):
+            # printBitMap(self._pinnedPieces(colorType))
+            direction = 0
+            
+            # get direction
+            if kingPosition > currentPosition:
+                direction = 4
+                distance = kingPosition - currentPosition
+            else:
+                distance = currentPosition - kingPosition
+
+            if (distance & 0b000111) == 0:
+                direction += 1
+            elif (kingPosition & 0b111000) == (currentPosition & 0b111000):
+                direction += 3
+            elif ((distance >> 3) & 0b000111) == (distance & 0b000111):
+                direction += 2
+
+            # possible move for absolute pin
+            # print(f'currentPosition : {currentPosition}, direction : {direction}, kingPosition : {kingPosition}')
+            # printBitMap(possibleSquares)
+            possibleSquares \
+                &= (getRayAttacks(self.bitBoardSet[nPiece] ^ curPosBB,
+                                direction,
+                                kingPosition) \
+                ^ curPosBB)
+            # printBitMap(possibleSquares)
+
+        # each case by pieceType
+        if pieceType & pawn:
+            pawnPossible = getPawnAttacks(self.bitBoardSet[nPiece], currentPosition, colorType)\
+                        | getPawnForward(self.bitBoardSet[nEmpty], currentPosition, colorType)
+            enPassantTarget = self.enPassantTarget
+            ePCurPos = enPassantTarget - 9 + (colorType << 4)
+            
+            if enPassantTarget and (enPassantTarget & 0b000111) and (currentPosition == ePCurPos):
+                pawnPossible |= (1 << enPassantTarget)
+            if enPassantTarget and ((enPassantTarget + 1) & 0b000111) and (currentPosition == ePCurPos + 2):
+                # print(f'enPassantTarget : {self.enPassantTarget}, currentPosition : {currentPosition}')
+                pawnPossible |= (1 << enPassantTarget)
+
+            return possibleSquares & pawnPossible
+        
+        if pieceType & knight:
+            return possibleSquares & getKnightAttacks(self.bitBoardSet[nEmpty] | self.bitBoardSet[oppColorType], currentPosition)
+        if pieceType & bishop:
+            return possibleSquares & getBishopAttacks(self.bitBoardSet[nPiece], currentPosition)
+        if pieceType & rook:
+            return possibleSquares & getRookAttacks(self.bitBoardSet[nPiece], currentPosition)
+        if pieceType & queen:
+            return possibleSquares & getQueenAttacks(self.bitBoardSet[nPiece], currentPosition)
+        if pieceType & king:
+            return self._getSafeMoveOfKing(colorType)
+
+        # exception handling
+        raise ValueError("pieceType is not defined")
+
+    # update chess state
+    
+
+    # movement functions
+
+    def _moveWithoutTest(self, currentPosition: int, nextPosition: int, colorType: int, pieceType: int, cpieceType: int) -> None:
+        """
+        update the board placement data by piece movement.
+        there is no handling. all parameters should be BBIndex.
+
+        Args:
+            currentPosition (int): \n
+                square of piece that is being moved.
+            nextPosition (int): \n
+                square of piece that is being moved to.
+            colorType (int): \n
+                color of piece that is being moved. 0, 1
+            pieceType (int): \n
+                type of piece that is being moved. 2 ~ 7
+            cpieceType (int): \n
+                type of piece that is being captured. 2 ~ 7. if movement is not capturing, 0.
+        """
+
+        # process
+        fromBB = 1 << currentPosition
+        ToBB = 1 << nextPosition
+        fromToBB = fromBB ^ ToBB
+
+        self.bitBoardSet[pieceType] ^= fromToBB
+        self.bitBoardSet[colorType] ^= fromToBB
+
+        # capture case
+        if cpieceType:
+            self.bitBoardSet[1 - colorType] ^= ToBB
+            self.bitBoardSet[cpieceType] ^= ToBB
+            self.bitBoardSet[nEmpty] ^= ToBB
+            self.bitBoardSet[nPiece] ^= ToBB
+
+        self.bitBoardSet[nEmpty] ^= fromToBB
+        self.bitBoardSet[nPiece] ^= fromToBB
+
+        self.board = Bitmaps2Board(self.bitBoardSet)
+
+        return
+
+    def _Promotion(self, square: int, pieceType: int) -> None:
+        """
+        update the board placement data by piece promotion.
+
+        Args:
+            square (int): \n
+                square of piece that is being promoted.
+            pieceType (int): \n
+                pieceType that is being promoted to.
+
+        Raises:
+            ValueError: \n
+                if promotionPieceType is not defined.
+            ValueError: \n
+                if promotion target is not pawn.
+        """
+
+        # raise
+        if (pieceType & 0b11111100) not in pieceTypes:
+            raise ValueError("promotionPieceType is not defined")
+        if self.board[square ^ 0b111000] & pawn == 0:
+            raise ValueError("promotion target is not pawn")
+
+        # board update
+        self.board[square ^ 0b111000] += ((pieceType & 0b11111100) - pawn)
+
+        # bitboard update
+        self.bitBoardSet[nPawn] ^= (1 << square)
+        self.bitBoardSet[pieceTypesToBBIndex[pieceType >> 2]] ^= (1 << square)
+
+        return
+
+    def _IsCastling(self, castlingIndex: int) -> bool:
+        """
+        check if castling conditions is possible.
+        this function also checking if castlingFlag is set
+
+        Args:
+            castlingIndex (int): \n
+                index of castling. 0 - white king side, 1 - white queen side, 2 - black king side, 3 - black queen side
+
+        Returns:
+            bool: \n
+                if castling is possible, return True. otherwise, return False.
+        """
+
+        if self.castlingFlags[castlingIndex] == False:
             return False
 
-        # check blocking
-        for i in range(currentPos + offset, nextPos, offset):
-            if self.placement[i] == empty:
-                continue
+        # variables
+        # types
+        colorType = castlingIndex >> 1  # 0 - white, 1 - black
+        isKingSide = (castlingIndex + 1) & 0b1
+        # squares
+        kingSquare = 4 + 56*colorType
+        # mask
+        # ob00001110 or 0b01100000
+        nPieceMask = (0b110 + isKingSide) << (1 << (isKingSide << 1))
+
+        # process
+        # is there a any piece in the castling way?
+        if self.bitBoardSet[nPiece] & (nPieceMask << 56*colorType):
+            return False
+        # current king, castling king and route is not checked?
+        if self._getAttackers(kingSquare, colorType^0b1):
+            return False
+        if self._getAttackers(2 + (isKingSide << 2) + 56*colorType, colorType^0b1):
+            return False
+        if self._getAttackers(3 + (isKingSide << 1) + 56*colorType, colorType^0b1):
             return False
 
         return True
+    
+    def _castling(self, castlingIndex: int) -> bool:
+        """
+        castling only it is possible.
+        this function also checking if castlingFlag is set
 
-    def _MovRuleCheck(self, currentPos: int, nextPos: int) -> bool:
-        if currentPos < 0 or currentPos >= 64:
-            raise ValueError("currentPos is out of range")
-        if nextPos < 0 or nextPos >= 64:
-            raise ValueError("nextPos is out of range")
+        Args:
+            castlingIndex (int): \n
+                index of castling. 0 - white king side, 1 - white queen side, 2 - black king side, 3 - black queen side
 
-        piece = self.placement[currentPos]
-        opponent = self.placement[nextPos]
+        Returns:
+            bool: \n
+                if castling is possible, return True. otherwise, return False.
+        """
 
-        # is empty?
-        if piece == empty:
+        if self._IsCastling[castlingIndex] == False:
             return False
-        # are pieces same color?
-        if (piece >> 2) == (opponent >> 2):
+
+        # variables
+        # types
+        colorType = castlingIndex >> 1  # 0 - white, 1 - black
+        isKingSide = (castlingIndex + 1) & 0b1
+        # squares
+        kingSquare = 4 + 56*colorType
+        kingToSquare = (kingSquare - 2) + (isKingSide << 2)
+        rookSquare = 7*(isKingSide) + 56*colorType
+        # flag
+        previousCastlingFlags = self.castlingFlags.copy()
+
+        # move
+        self._moveWithoutTest(
+            kingSquare, kingToSquare, colorType, nKing, 0)
+        self._moveWithoutTest(
+            rookSquare, 3 + (isKingSide << 1) + 56*colorType, colorType, nRook, 0)
+
+        # update
+        # king square
+        self.PositionsOfKings[colorType] = kingToSquare
+        # castling flags
+        self.castlingFlags[colorType << 1] = False
+        self.castlingFlags[(colorType << 1) + 1] = False
+        # move list
+        self.moveList[self.moveListCurrent] = Move(
+            kingSquare, (kingSquare - 2) + (isKingSide << 2), colorType, 3, empty, tuple(previousCastlingFlags))
+        self.moveListCurrent += 1
+
+        return True
+
+    @dispatch(str)
+    def makeMove(self, pureCoordinate: str) -> bool:
+        # variables
+        moveArgs = pureCoordinate2args(pureCoordinate)
+        # positions
+        currentPosition = moveArgs[0]
+        nextPosition = moveArgs[1]
+        # types
+        promoPieceType = moveArgs[2]
+        colorType = (self.board[currentPosition ^ 0b111000] & 0b00000011) >> 1
+        pieceType = pieceTypesToBBIndex[(
+            self.board[currentPosition ^ 0b111000] & 0b11111100) >> 2]
+        moveType = 1    # for moveList parameter
+
+        cpiece = self.board[nextPosition ^ 0b111000]
+
+        toBB = 1 << nextPosition
+
+        # raise
+        if self.bitBoardSet[colorType] & toBB:
+            raise ValueError(
+                "move to square of same color piece is not allowed")
+
+        # castling
+        if pieceType == nKing:
+            if pureCoordinate == "e1g1":
+                return self._castling(0)
+            if pureCoordinate == "e1c1":
+                return self._castling(1)
+            if pureCoordinate == "e8g8":
+                return self._castling(2)
+            if pureCoordinate == "e8c8":
+                return self._castling(3)
+
+        # filter Illegal move
+        if (self._possibleMove(currentPosition) & toBB) == 0:
             return False
 
+        # normal move
+        self._moveWithoutTest(currentPosition, nextPosition,
+                              colorType, pieceType, pieceTypesToBBIndex[(cpiece & 0b11111100) >> 2])
+
+        # promotion
+        if promoPieceType:
+            self._Promotion(nextPosition, promoPieceType)
+            moveType = 2
+
+        # update king square
+        if pieceType == nKing:
+            self.PositionsOfKings[colorType] = nextPosition
+
+        # update castling flags: if king moves, remove castling flags
+        if pieceType == nKing:
+            self.castlingFlags[colorType << 1] = False
+            self.castlingFlags[(colorType << 1) + 1] = False
+        # if rook moves, remove castling flags
+        if (pieceType == nRook) and (0x8100000000000081 & (1 << currentPosition)):
+            if currentPosition == 7:
+                self.castlingFlags[0] = False
+            if currentPosition == 0:
+                self.castlingFlags[1] = False
+            if currentPosition == 63:
+                self.castlingFlags[2] = False
+            if currentPosition == 54:
+                self.castlingFlags[3] = False
+        # if capture is rook, then remove castling flags
+        if (cpiece == nRook) and (0x8100000000000081 & toBB):
+            if nextPosition == 7:
+                self.castlingFlags[0] = False
+            if nextPosition == 0:
+                self.castlingFlags[1] = False
+            if nextPosition == 63:
+                self.castlingFlags[2] = False
+            if nextPosition == 54:
+                self.castlingFlags[3] = False
+
+        # set en passant target
+        self.enPassantTarget = 0
+        
+        if (pieceType == nPawn) and (currentPosition + 16 == nextPosition + colorType*32):
+            self.enPassantTarget = (currentPosition + nextPosition) >> 1
+
+        # move list
+        self.moveList[self.moveListCurrent] = Move(
+            currentPosition, nextPosition, colorType, moveType, cpiece, promoPieceType, tuple(self.castlingFlags.copy()))
+        self.moveListCurrent += 1
+        
+        # update chess state
+        self.nextRound()
+
+        return True
+
+    @dispatch(Move)
+    def makeMove(self, move: Move):
+        # variables
+
+        # positions
+        currentPosition = move.fromSquare
+        nextPosition = move.toSquare
+        # types
+        promoPieceType = move.promotionPiece
+        colorType = move.colorType
+        pieceType = pieceTypesToBBIndex[(
+            self.board[currentPosition ^ 0b111000] & 0b11111100) >> 2]
+        moveType = move.moveType    # for moveList parameter
+
+        cpiece = move.capturedPiece
+
+        # castling
+        if moveType == 3:
+            if nextPosition == 6:
+                self._castling(0)
+            if nextPosition == 2:
+                self._castling(1)
+            if nextPosition == 62:
+                self._castling(2)
+            if nextPosition == 58:
+                self._castling(3)
+
+        # normal move
+        if moveType == 1:
+            self._moveWithoutTest(currentPosition, nextPosition,
+                              colorType, pieceType, pieceTypesToBBIndex[(cpiece & 0b11111100) >> 2])
+
+        # promotion
+        if moveType == 2:
+            self._Promotion(nextPosition, promoPieceType)
+
+        # update king square
+        if pieceType == nKing:
+            self.PositionsOfKings[colorType] = nextPosition
+
+        # update castling flags: if king moves, remove castling flags
+        if pieceType == nKing:
+            self.castlingFlags[colorType << 1] = False
+            self.castlingFlags[(colorType << 1) + 1] = False
+        # if rook moves, remove castling flags
+        if (pieceType == nRook) and (0x8100000000000081 & (1 << currentPosition)):
+            if currentPosition == 7:
+                self.castlingFlags[0] = False
+            if currentPosition == 0:
+                self.castlingFlags[1] = False
+            if currentPosition == 63:
+                self.castlingFlags[2] = False
+            if currentPosition == 54:
+                self.castlingFlags[3] = False
+        # if capture is rook, then remove castling flags
+        if (cpiece == nRook) and (0x8100000000000081 & (1 << nextPosition)):
+            if nextPosition == 7:
+                self.castlingFlags[0] = False
+            if nextPosition == 0:
+                self.castlingFlags[1] = False
+            if nextPosition == 63:
+                self.castlingFlags[2] = False
+            if nextPosition == 54:
+                self.castlingFlags[3] = False
+
+        # set en passant target
+        self.enPassantTarget = 0
+        
+        if (pieceType == nPawn) and (currentPosition + 16 == nextPosition + colorType*32):
+            self.enPassantTarget = (currentPosition + nextPosition) >> 1
+
+        # move list
+        self.moveList[self.moveListCurrent] = Move(
+            currentPosition, nextPosition, colorType, moveType, cpiece, tuple(self.castlingFlags.copy()))
+        self.moveListCurrent += 1
+        
+        # update chess state
+        self.nextRound()
+        
+        # print(f'After make : {move}')
+        # printchess(self.board)
+
+        return
+
+    def _setPiece(self, Square: int, piece: int) -> None:
         pieceType = piece & 0b11111100
-        color = piece & 0b00000011
+        colorType = (piece & 0b11) - 1
+        squareBitmap = 1 << Square
+        # raise
+        if pieceType not in pieceTypes:
+            raise ValueError("pieceType is not defined")
+        if colorType >> 1:
+            raise ValueError("colorType is not defined")
 
-        offset = self._directionOffset(currentPos, nextPos)
+        # process
+        
+        # bitmaps
+        self.bitBoardSet[nEmpty] ^= squareBitmap
+        self.bitBoardSet[nPiece] ^= squareBitmap
+        self.bitBoardSet[pieceTypesToBBIndex[pieceType >> 2]] |= squareBitmap
+        self.bitBoardSet[colorType] |= squareBitmap
+        # board
+        self.board[Square ^ 0b111000] = piece
+        
+        # print(f'After set piece : \n')
+        # printchess(self.board)
 
-        file_dist = nextPos % 8 - currentPos % 8
-        rank_dist = nextPos // 8 - currentPos // 8
+        return
 
-        # is valid knight movement?
-        if pieceType == knight:
-            if (abs(abs(rank_dist) - abs(file_dist))) == 1 and abs(rank_dist) + abs(file_dist) == 3:
-                return True
-            return False
+    @dispatch()
+    def unMakeMove(self):
+        # variables
+        self.moveListCurrent -= 1
+        move = self.moveList[self.moveListCurrent]
 
-        # is valid direction of movement?
-        if offset == 0:
-            return False
+        toSquare = move.toSquare
+        fromSquare = move.fromSquare
+        colorType = move.colorType
+        pieceType = pieceTypesToBBIndex[(self.board[toSquare ^ 0b111000] & 0b11111100) >> 2]
+        capturedPiece = move.capturedPiece
+        moveType = move.moveType
 
-        # is blocking?
-        if self._routeCheck(currentPos, nextPos) is False:
-            return False
+        # unpromotion
+        if moveType == 2:
+            self._Promotion(toSquare, pawn)
 
-        # is valid king movement?
-        if pieceType == king:
-            if abs(rank_dist) < 2 and abs(file_dist) < 2:
-                return True
-            return False
+        # unmake move
+        self.castlingFlags = list(move.previousCastlingFlags)
+        self._moveWithoutTest(toSquare, fromSquare, colorType, pieceType, empty)
 
-        # is valid rook movement?
-        if pieceType == rook:
-            if rank_dist*file_dist:
-                return False
-            return True
+        # undo capture
+        if capturedPiece:
+            self._setPiece(toSquare, capturedPiece)
 
-        # is valid rook movement?
-        if pieceType == bishop:
-            if abs(offset) == 7 or abs(offset) == 9:
-                return True
-            return False
+        # update king square
+        if pieceType == nKing:
+            self.PositionsOfKings[colorType] = fromSquare
 
-        # is valid rook movement?
-        if pieceType == queen:
-            return True
+        # undo castling: undo rook move
+        if moveType == 3:
+            self._moveWithoutTest((toSquare + fromSquare) >> 1, (((toSquare >> 2) & 0b1)*7 + (
+                toSquare >> 5)*56), colorType, pieceType, empty)
 
-        # white, black = 1, 2
-        if pieceType == pawn:
-            # forward
-            if file_dist == 0:
-                # one space
-                if (color == white and rank_dist == -1) or (color == black and rank_dist == 1):
-                    return True
-                # two space
-                if (color == white and rank_dist == -2 and currentPos // 8 == 6) or (color == black and rank_dist == 2 and currentPos // 8 == 1):
-                    return True
-            # attack
-            if ((color == white and rank_dist == -1) or (color == black and rank_dist == 1)) and abs(file_dist) == 1:
-                # nomal attack
-                if opponent:
-                    return True
-                # en passant
-                if opponent == empty and nextPos == self.enPassantTarget:
-                    return True
+        # update chess state
+        self.undoRound()
 
-        return False
+        return
 
-    def _IsPositionUnderAttack(self, Pos, color=empty, piece=empty) -> list[int]:
-        # check if Position is under attack by opponent
-        # Position could be empty, but, in this case, color should be assigned by argument
-        # able to assume other piece in this Position by argument value
+    @dispatch(Move)
+    def unMakeMove(self, move: Move):
+        # variables
+        self.moveListCurrent -= 1
 
-        CheckingPiece = []
+        toSquare = move.toSquare
+        fromSquare = move.fromSquare
+        colorType = move.colorType
+        pieceType = pieceTypesToBBIndex[(self.board[toSquare ^ 0b111000] & 0b11111100) >> 2]
+        capturedPiece = move.capturedPiece
+        moveType = move.moveType
 
-        if Pos < 0 or Pos > 63:
-            raise ValueError("Pos is out of range")
+        # unpromotion
+        if moveType == 2:
+            self._Promotion(toSquare, pawn)
 
-        if piece == empty:
-            piece = self.placement[Pos]
-        if color == empty:
-            color = piece & 0b00000011
+        # unmake move
+        self.castlingFlags = list(move.previousCastlingFlags)
+        self._moveWithoutTest(toSquare, fromSquare, colorType, pieceType, empty)
 
-        if color == empty:
-            raise ValueError("color is not assigned")
-        if color != piece & 0b00000011:
-            raise ValueError("color and piece's color is not match")
+        # undo capture
+        if capturedPiece:
+            # print(f'toSquare : {toSquare}, capturedPiece : {capturedPiece}')
+            self._setPiece(toSquare, capturedPiece)
 
-        rankPos = Pos % 8
-        filePos = Pos // 8
-        pieceType = piece & 0b11111100
+        # update king square
+        if pieceType == nKing:
+            self.PositionsOfKings[colorType] = fromSquare
 
-        # knight opponent checking
-        for offset in [-17, -15, -10, -6, 6, 10, 15, 17]:
-            opponentPos = Pos + offset
+        # undo castling: undo rook move
+        if moveType == 3:
+            self._moveWithoutTest((toSquare + fromSquare) >> 1, (((toSquare >> 2) & 0b1)*7 + (
+                toSquare >> 5)*56), colorType, pieceType, empty)
 
-            # boundary
-            if opponentPos < 0:
+        # update chess state
+        self.undoRound()
+        
+        # print(f'After unMake : {move}')
+        # printchess(self.board)
+        
+        return
+
+
+    # funciton for testing
+
+    def _getMoveList(self, sideToMove: int = 0) -> list:
+        """
+        return a list of possible movement for sideToMove.
+        if sideToMove is not defined, return a list of all possible movement.
+
+        Args:
+            sideToMove (int, optional): \n
+                side to move. 0 - none, 1 - white, 2 - black. Defaults to 0.
+
+        Returns:
+            Movelist (list[tuple[int]]): \n
+                list of possible movement.
+        """
+
+        moveList = []
+        castlingFlags = self.castlingFlags
+
+        for index in range(4):
+            if self._IsCastling(index):
+                # variables
+                # types
+                colorType = index >> 1  # 0 - white, 1 - black
+                isKingSide = (index + 1) & 0b1
+                # squares
+                kingSquare = 4 + 56*colorType
+                kingToSquare = (kingSquare - 2) + (isKingSide << 2)
+                
+                moveList.append(
+                        Move(kingSquare, kingToSquare, colorType, 3, empty, empty, castlingFlags))
+
+        for currentPos in range(63, -1, -1):
+            possibleMoveBB = self._possibleMove(currentPos, sideToMove)
+
+            if possibleMoveBB == 0:
                 continue
-            if opponentPos > 63:
-                break
 
-            opponent = self.placement[opponentPos]
+            piece = self.board[currentPos ^ 0b111000]
 
-            # opponent existence
-            if opponent == empty:
-                continue
+            for _ in range(64):
+                if possibleMoveBB:
+                    # variables
+                    nextPos = bitScan(possibleMoveBB, False)
+                    colorType = sideToMove >> 1
+                    cpiece = self.board[nextPos ^ 0b111000]
 
-            opponentRankPos = opponentPos % 8
-            opponentFilePos = opponentPos // 8
+                    # update possibleMoveBB
+                    possibleMoveBB &= (possibleMoveBB - 1)
 
-            # movement
-            if abs(opponentRankPos - rankPos) + abs(opponentFilePos - filePos) != 3:
-                continue
+                    # promotion case
+                    if (piece == white + pawn and (nextPos & 0b111000) == 56) or \
+                        (piece == black + pawn and (nextPos & 0b111000) == 0):
+                        moveList.append(
+                            Move(currentPos, nextPos, colorType, 2, cpiece, (1 << 3), castlingFlags))
+                        moveList.append(
+                            Move(currentPos, nextPos, colorType, 2, cpiece, (1 << 4), castlingFlags))
+                        moveList.append(
+                            Move(currentPos, nextPos, colorType, 2, cpiece, (1 << 5), castlingFlags))
+                        moveList.append(
+                            Move(currentPos, nextPos, colorType, 2, cpiece, (1 << 6), castlingFlags))
+                        continue
 
-            if opponent & 0b11111100 == knight and opponent & 0b00000011 != color:
-                CheckingPiece.append(opponentPos)
-
-        for fileDirection, rankDirection in [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]:
-            for i in range(1, 8):
-
-                opponentFilePos = filePos + fileDirection*i
-                opponentRankPos = rankPos + rankDirection*i
-
-                # boundary
-                if opponentRankPos < 0 or opponentRankPos > 7 \
-                        or opponentFilePos < 0 or opponentFilePos > 7:
-                    break
-
-                opponentPos = opponentRankPos*8 + opponentFilePos
-
-                # opponent existence
-                if self.placement[opponentPos] == empty:
+                    moveList.append(
+                        Move(currentPos, nextPos, colorType, 1, cpiece, empty, castlingFlags))
                     continue
 
-                opponentColor = self.placement[opponentPos] & 0b00000011
+                break
 
-                # color check
-                if opponentColor == empty:
-                    raise ValueError("opponent color is not assigned")
-                if opponentColor == color:
-                    break
+        return moveList
 
-                opponentType = self.placement[opponentPos] & 0b11111100
+    def perft(self, depth: int) -> int:
+        '''
+        #### initial position must be set before calling this function.\n
+        
+        return the number of nodes at depth.
+        
+        Args:
+            depth (int): \n
+                depth of perft.
+                
+        Returns:
+            int: \n
+                number of nodes at depth.
+        '''
+        possibleMoveList = [Move() for _ in range(256)]
+        nodes = 0
+        
+        if depth == 0:
+            return 1
 
-                # movement
-                if opponentType == pawn:
-                    if i != 1 or fileDirection == 0:
-                        break
+        possibleMoveList = self._getMoveList(self.sideToMove)
 
-                    # nomal pawn attack
-                    if (color == white and rankDirection == -1) \
-                            and (color == black and rankDirection == 1):
-                        CheckingPiece.append(opponentPos)
-                        break
+        # printBitMaps(self.bitBoardSet)
 
-                    # en passant
-                    if pieceType == pawn and rankDirection == 0:
-                        enPassantTarget = self.enPassantTarget
-                        if enPassantTarget == 0:
-                            break
-                        if (color == white and Pos == enPassantTarget - 8) \
-                                or (color == black and Pos == enPassantTarget + 8):
-                            CheckingPiece.append(opponentPos)
-                    break
+        for move in possibleMoveList:
+            self.makeMove(move)
+            # if depth >> 1:
+            #     printMove(move)
+            nodes += self.perft(depth - 1)
+            self.unMakeMove(move)
+        
+        print(f'nodes : {nodes}')
+        return nodes
 
-                if opponentType == rook:
-                    if not fileDirection*rankDirection:
-                        CheckingPiece.append(opponentPos)
-                    break
+    def perftDivide(self, depth: int) -> int:
+        '''
+        #### initial position must be set before calling this function.\n
+        
+        return the number of nodes at depth.
+        
+        Args:
+            depth (int): \n
+                depth of perft.
+                
+        Returns:
+            int: \n
+                number of nodes at depth.
+        '''
+        possibleMoveList = [Move() for _ in range(256)]
+        divideList = []
+        nodes = 0
+        
+        if depth == 0:
+            return 1
 
-                if opponentType == bishop:
-                    if fileDirection*rankDirection:
-                        CheckingPiece.append(opponentPos)
-                    break
+        possibleMoveList = self._getMoveList(self.sideToMove)
 
-                if opponentType == queen:
-                    CheckingPiece.append(opponentPos)
-                    break
+        print(f'len( possibleMoveList ) : \n{len(possibleMoveList)}\n')
+        # printBitMaps(self.bitBoardSet)
 
-                if opponentType == king:
-                    if i == 1:
-                        CheckingPiece.append(opponentPos)
-                    break
+        for index, move in enumerate(possibleMoveList):
+            self.makeMove(move)
+            
+            divideList.append(self.perft(depth - 1))
+            nodes += divideList[index]
+            
+            self.unMakeMove(move)
+        
+        for index, node in enumerate(divideList):
+            printMove(possibleMoveList[index])
+            print(f' : {node}')
+        
+        print(f'nodes : {nodes}')
+        return nodes
 
-        print(CheckingPiece)
+    # =================================================================
 
-        return CheckingPiece
-
-    def _Move(self, currentPos: int, nextPos: int) -> bool:
-        if currentPos < 0 or currentPos >= 64:
-            raise ValueError("currentPos is out of range")
-        if nextPos < 0 or nextPos >= 64:
-            raise ValueError("nextPos is out of range")
-        if self._MovRuleCheck(currentPos, nextPos) == False:
-            # print("movement is invalid by rule")
-            return False
-
-        piece = self.placement[currentPos]
-        pieceType = piece & 0b11111100
-        color = piece & 0b00000011
-
-        if pieceType == king:
-            # temparal movement
-            savePos = self.placement[nextPos]
-            self.placement[nextPos] = self.placement[currentPos]
-            self.placement[currentPos] = empty
-
-            if self._IsPositionUnderAttack(nextPos) == False:
-                # print("King is in check")
-                self.placement[currentPos] = self.placement[nextPos]
-                self.placement[nextPos] = savePos
-                return False
-
-        elif self._absolutePinCheck(self.PositionsOfKings[color - 1], currentPos) != nextPos:
-            # print("Piece is in absolute pin")
-            return False
-
-        # moving piece process
-        self.placement[nextPos] = self.placement[currentPos]
-        self.placement[currentPos] = empty
-
-        self.PositionsOfPieaceBycolor[color-1].remove(currentPos)
-        self.PositionsOfPieaceBycolor[color-1].add(nextPos)
-
-        if pieceType == pawn \
-            and ((color == white and nextPos == currentPos - 16)
-                 or (color == black and nextPos == currentPos + 16)):
-            self.enPassantTarget = (nextPos + currentPos) >> 1
-            return True
-
-        if pieceType == king:
-            self.PositionsOfKings[color-1] = nextPos
-
-        self.enPassantTarget = 0
-        return True
-
-    def _IsCheckMate(self, Pos):
-        if Pos < 0 or Pos > 63:
-            raise ValueError("Pos is out of range")
-
-        kingPiece = self.placement[Pos]
-
-        if kingPiece & 0b11111100 != king:
-            raise ValueError("this is not king piece")
-
-        CheckingPieces = self._IsPositionUnderAttack(Pos)
-
-        color = kingPiece & 0b00000011
-        rankPos = Pos % 8
-        filePos = Pos // 8
-
-        # checking the existence of king's escape movement
-        for rankOffset, fileOffset in [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]:
-            opponentRankPos = rankPos + rankOffset
-            opponentFilePos = filePos + fileOffset
-
-            if opponentRankPos < 0 or opponentRankPos > 7 or opponentFilePos < 0 or opponentFilePos > 7:
-                continue
-
-            opponentPos = opponentRankPos*8 + opponentFilePos
-
-            if self.placement[opponentPos] & 0b00000011 == color:
-                continue
-            if self._IsPositionUnderAttack(opponentPos, color, kingPiece):
-                continue
-
-            return False
-
-        # if not double check
-        if len(CheckingPieces) == 1:
-
-            checkingPiecePos = CheckingPieces[0]
-            blockingPieces = self._IsPositionUnderAttack(checkingPiecePos)
-
-            # could catch checkingPiece?
-            if blockingPieces != []:
-                if len(blockingPieces) == 1 and self.placement[blockingPieces[0]] % 8 == 6:
-                    return True
-                return False
-
-            # or could blocking checkingPiece?
-            offset = 0
-
-            if Pos//8 == checkingPiecePos//8:
-                offset = 1
-            else:
-                for i in range(10, 7, -1):
-                    if abs(checkingPiecePos - Pos) % i == 0:
-                        offset = i
-                        break   # if multiple conditions are satisfied, largest value is selected
-
-            if offset == 0:
-                return True
-
-            if Pos > checkingPiecePos:
-                offset = -offset
-
-            for i in range(Pos + offset, checkingPiecePos, offset):
-                if self._IsPositionUnderAttack(i, 3-color):
-                    return False
-
-        return True
+    
 
     def _IsEnd(self):
         # check end condition of game
         # check and checkmate condition is allowed for only 'side to move'
         # if opponent of 'side to move' is in check or checkmate, previous move is invalid move
 
-        side = self.colorToMove
+        side = self.sideToMove
         count = 0
 
         # check previous move is self check
@@ -527,156 +1057,3 @@ class Chess():
                 print(" is Check!")
 
         return False
-
-# ======== main ======== #
-
-
-chess = Chess()
-
-printchess(chess.placement)
-
-dict_PiecepieceType = {"P": 1, "R": 2, "N": 3, "B": 4, "Q": 5, "K": 6}
-
-while (chess._IsEnd() == False):
-    Round = chess.fullMoveCounter
-
-    print("\nRound :", Round+1, "\n")
-
-    printchess(chess.placement)
-
-    INPUT = input()
-    err_input = False
-    Pos = [-1, 0]
-    pieceType = 0
-    castling = 0
-
-    if len(INPUT) == 3:
-        if 'PRNBQKprnbqk'.count(INPUT[0]):
-            pieceType = dict_PiecepieceType.get(INPUT[0].upper(), 0)
-            INPUT = INPUT[1:]
-        else:
-            err_input = True
-
-    if len(INPUT) == 2:
-        if 'ABCDEFGHabcdefgh12345678'.count(INPUT[0]) and '12345678'.count(INPUT[1]):
-            rankPos = 0
-            filePos = 8-int(INPUT[1])
-
-            if '12345678'.count(INPUT[0]):
-                rankPos = int(INPUT[0])-1
-            else:
-                rankPos = int(ord(INPUT[0].upper()) - ord('A'))
-
-            Pos[1] = rankPos + filePos*8
-
-            if pieceType:
-                Possible_pieces = list(filter(
-                    lambda x: chess.Position[x]//8 == Round % 2 and chess.Position[x] % 8 == pieceType, chess._IsPositionUnderAttack(Pos[1])))
-            else:
-                Possible_pieces = list(
-                    filter(lambda x: chess.Position[x]//8 == Round % 2, chess._IsPositionUnderAttack(Pos[1])))
-
-            if Possible_pieces:
-                if len(Possible_pieces) > 1:
-                    print("둘수 있는 말이 2개 이상입니다.")
-                else:
-                    Possible_Pos = Possible_pieces[0]
-                    print(Possible_Pos % 8, Possible_Pos//8)
-                    Pos[0] = Possible_Pos
-            else:
-                print("둘수 있는 말이 없습니다.")
-
-            if Pos[0] == -1:
-                err_input = True
-
-        elif INPUT.isalpha() and pieceType == 0:
-            if INPUT[1].upper() == 'C' and chess.special_Mov_flag[Round % 2] & 8:
-                if 'RK'.count(INPUT[1].upper()):
-                    castling = 2
-                if 'LQ'.count(INPUT[1].upper()):
-                    castling = 1
-
-                if castling:
-                    if castling == 1:
-                        sign = -1
-                    else:
-                        sign = 1
-
-                    for i in range(3):
-                        if i and chess.Position[4+1*sign + 56*((Round+1) % 2)]:
-                            castling = 0
-                            break
-                        if chess._IsPositionUnderAttack(4+1*sign + 56*((Round+1) % 2), Round % 2):
-                            castling = 0
-                            break
-
-                else:
-                    err_input = True
-            else:
-                err_input = True
-
-        elif len(INPUT) == 4 and INPUT.isdigit() and not INPUT.count('9'):
-            Pos[0] = (int(INPUT[0]) - 1) + (8 - int(INPUT[1]))*8
-            Pos[1] = (int(INPUT[2]) - 1) + (8 - int(INPUT[3]))*8
-
-        else:
-            err_input = True
-
-        if err_input:
-            print("input err")
-            continue
-
-        if castling:
-            if castling == 2:
-                sign = 1
-            else:
-                sign = -1
-
-            chess._Move(4, 7*(Round % 2), 4 + 2*sign, 7*(Round % 2))
-            chess._Move(7*(castling-1), 7*(Round %
-                                           2), 4 + 1*sign, 7*(Round % 2))
-            chess.special_Mov_flag[Round % 2] = 0
-            chess._NextRound()
-
-        elif chess._MovCheck(Pos[0], Pos[1]):
-
-            if chess.special_Mov_flag[Round % 2]:
-                if Pos[0] == 56*((Round+1) % 2) or Pos[1] == 56*((Round+1) % 2):
-                    chess.special_Mov_flag[Round % 2] &= 23
-                if Pos[0] == 7 + 56*((Round+1) % 2) or Pos[1] == 7 + 56*((Round+1) % 2):
-                    chess.special_Mov_flag[Round % 2] &= 15
-                if Pos[0] == 4 + 56*((Round+1) % 2):
-                    chess.special_Mov_flag[Round % 2] &= 7
-
-            chess._Move(Pos[0], Pos[1])
-
-            for i in range(64):
-                if chess.Position[i] == 6 + (Round % 2)*8 and chess._IsPositionUnderAttack(i):
-                    err_input = True
-
-            if err_input:
-                chess._Move(Pos[1], Pos[0])
-                print("체크로 불가한 이동입니다.")
-                continue
-
-            chess._NextRound
-            print('(', Pos[0] % 8 + 1, 8 - Pos[0]//8,
-                  ') --> (', Pos[1] % 8 + 1, 8 - Pos[1]//8, ')')
-
-        else:
-            print("Fatal err")
-            continue
-
-        if chess.Position[Pos[0]] % 8 == 1 and abs(Pos[1] - Pos[0]) == 16:
-            chess.special_Mov_flag[(Round+1) % 2] |= (Pos[0] % 8)
-        else:
-            chess.special_Mov_flag[(Round+1) % 2] &= 24
-            chess.special_Mov_flag[Round % 2] &= 24
-
-    chess._PrintChess()
-    chess._NextRound()
-
-if chess.colorToMove == white:
-    print("white team wins")
-else:
-    print("black team wins")

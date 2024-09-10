@@ -1,12 +1,7 @@
 from const_variable import *
 
 
-def printpiece(pieceplacement: list[int], index: int) -> None:
-    if 0 > index or index >= 64:
-        raise ValueError("index is out of range")
-
-    piece = pieceplacement[index]
-
+def printpiece(piece: int) -> None:
     # empty check
     if piece == empty:
         print("| __ ", end="")
@@ -17,7 +12,7 @@ def printpiece(pieceplacement: list[int], index: int) -> None:
     piece_type = piece & 0b11111100
 
     if not piece_type or not piece_color:
-        raise ValueError("undefined piece")
+        raise ValueError(f'undefined piece : {piece}')
 
     print("| ", end="")
 
@@ -47,7 +42,7 @@ def printchess(pieceplacement: list[int]) -> None:
 
         # piece initial
         for j in range(8):
-            printpiece(pieceplacement, i*8 + j)
+            printpiece(pieceplacement[i*8 + j])
 
         print("|")
         if i == 7:
@@ -76,10 +71,25 @@ def getBitBoardSetString(bitBoardSet: list) -> str:
         s += getBitBoardString(bitBoardSet[BBSetIndex])
     return s
 
-
-def printBitBoard(board: int):
+def printBitMap(bitMap: int):
     for rank in range(7, -1, -1):
         for file in range(8):
-            print("1" if board & (0x1 << (8 * rank + file)) else "0", end="")
+            print("1" if bitMap & (0x1 << (8 * rank + file)) else "0", end="")
         print()
     print()
+
+def printBitMaps(bitMaps: list[int]):
+    print(f'nWhite\tnBlack\tnPawn\tnKnight\tnBishop\tnRook\tnQueen\tnKing\tnPiece\tnEmpty')
+    for rank in range(7, -1, -1):
+        for index in range(10):
+            for file in range(8):
+                print("1" if bitMaps[index] & (0x1 << (8 * rank + file)) else "0", end="")
+            print(end="\t")
+        print()
+    print()
+
+def printMove(move: Move):
+    fromSquare = move.fromSquare
+    toSquare = move.toSquare
+    
+    print(f'move : {chr(ord('a') + (fromSquare & 0x7))}{chr(ord('1') + (fromSquare >> 3))}{chr(ord('a') + (toSquare & 0x7))}{chr(ord('1') + (toSquare >> 3))}')

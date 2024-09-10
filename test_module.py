@@ -5,6 +5,7 @@ from printing_chessboard import *
 # module that needs to be tested
 
 from chess_bitmap_module import *
+from bit_board_chess import Chess
 
 # module test
 
@@ -226,7 +227,7 @@ class BitBoardTest(unittest.TestCase):
             rook,     empty,          empty,          empty
         ]
 
-        baseTestBBs = convertBoard2BitBoardSet(baseTestBoard)
+        baseTestBBs = Board2BitBoardSet(baseTestBoard)
 
         for _ in range(64):
             random_offset = random.randint(0, 3) + (random.randint(0, 3) << 3)
@@ -258,7 +259,7 @@ class BitBoardTest(unittest.TestCase):
             knight, empty,          empty,          empty,          empty
         ]
 
-        baseTestBBs = convertBoard2BitBoardSet(baseTestBoard)
+        baseTestBBs = Board2BitBoardSet(baseTestBoard)
 
         for _ in range(8):
             random_offset = random.randint(0, 3) + (random.randint(0, 3) << 3)
@@ -289,7 +290,7 @@ class BitBoardTest(unittest.TestCase):
             black + queen,  empty,          white + rook,   empty,          white +
             king,   empty,          empty,          empty
         ]
-        baseTestBBs = convertBoard2BitBoardSet(baseTestBoard)
+        baseTestBBs = Board2BitBoardSet(baseTestBoard)
         baseTestSquares = [18, 2, 36, 0]
         baseTestResult = [0x0000000102000800, 0x000000000000000b,
                           0x0000000e10100000, 0x0000000001050306]
@@ -354,6 +355,18 @@ class BitBoardTest(unittest.TestCase):
                                 \n piece : \n{str(testBoard[(8*(7 - (currentPosition >> 3)) + (currentPosition & 0b111))])}\
                                 \n bitboard : \n{getBitBoardSetString(testBBs)}")
 
+precalculatedPerftResult = [20, 400, 8902, 197281, 4865609, 119060324, 3195901860, 84998978956, 2439530234167, 69352859712417]
 
 if __name__ == '__main__':
-    unittest.main()
+    chess = Chess()
+    
+    for testParameter in range(1, 6):
+        chess.reset()
+        perftResult = chess.perft(testParameter)
+        if perftResult == precalculatedPerftResult[testParameter - 1]:
+            print(f'Perft({testParameter}) : {perftResult}\n\n')
+        else:
+            print(f'Perft({testParameter}) : {perftResult} (wrong)\n\n')    
+            raise Exception
+
+    # temp code : unittest.main()

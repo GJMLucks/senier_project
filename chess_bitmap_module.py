@@ -3,7 +3,7 @@ from const_variable import *
 
 # convert function
 
-def convertBoard2BitBoardSet(board: list[int]) -> list[int]:
+def Board2BitBoardSet(board: list[int]) -> list[int]:
     """
     convert board to bitmaps.\n
     return list of bitboards.
@@ -46,7 +46,7 @@ def convertBoard2BitBoardSet(board: list[int]) -> list[int]:
     return bitBoardSet
 
 
-def convertBitmaps2Board(bitBoardSet: list[int]) -> list[int]:
+def Bitmaps2Board(bitBoardSet: list[int]) -> list[int]:
     board = [empty for _ in range(64)]
 
     for bitBoardIndex in range(8):
@@ -58,6 +58,31 @@ def convertBitmaps2Board(bitBoardSet: list[int]) -> list[int]:
                     board[(8 * rank) + file] += (1 << bitBoardIndex)
 
     return board
+
+
+def pureCoordinate2args(pureCoordinate: str) -> tuple:
+    """
+    convert pureCoordinate to args.\n
+    return tuple of args.
+
+    Args:
+        pureCoordinate (str): \n
+            pureCoordinate to convert.
+
+    Returns:
+        args (tuple): \n
+            tuple of args.
+    """
+    currentPosition = (
+        (ord(pureCoordinate[0]) - 97) + 8*(int(pureCoordinate[1]) - 1))
+    nextPosition = (
+        (ord(pureCoordinate[2]) - 97) + 8*(int(pureCoordinate[3]) - 1))
+    promotionPieceType = empty
+
+    if len(pureCoordinate) == 5:
+        promotionPieceType = pureCordPromoNotation2PieceType[pureCoordinate[4]]
+
+    return currentPosition, nextPosition, promotionPieceType
 
 
 # bit rotate operation
@@ -80,6 +105,7 @@ def rotateLeft64int(bitmap: int, offset: int) -> int:
 
     return ((bitmap << offset) | (bitmap >> (64 - offset))) if (offset > 0) \
         else ((bitmap >> -offset) | (bitmap << (64 + offset)))
+
 
 
 
@@ -252,22 +278,22 @@ queenAttacks = [rookAttacks[position] | bishopAttacks[position]
 baseKingAttack = 0x01c1c1c0000000000000
 baseKnightAttack = 0x0
 
-kingMoveSqures = [[basePosition] for basePosition in range(64)]
+kingMoveSquares = [[basePosition] for basePosition in range(64)]
 
 for position in range(64):
     if position & 0x7 != 0:
-        kingMoveSqures[position].append(position - 1)
+        kingMoveSquares[position].append(position - 1)
     if position & 0x7 != 7:
-        kingMoveSqures[position].append(position + 1)
+        kingMoveSquares[position].append(position + 1)
     if position >> 3 != 0:
-        upperKingMoveSqures \
-            = [basePosition - 8 for basePosition in kingMoveSqures[position]]
-        kingMoveSqures[position].extend(upperKingMoveSqures)
+        upperKingMoveSquares \
+            = [basePosition - 8 for basePosition in kingMoveSquares[position]]
+        kingMoveSquares[position].extend(upperKingMoveSquares)
     if position >> 3 != 7:
-        lowerKingMoveSqures \
-            = [basePosition + 8 for basePosition in kingMoveSqures[position]]
-        kingMoveSqures[position].extend(lowerKingMoveSqures)
-    kingMoveSqures[position].remove(position)
+        lowerKingMoveSquares \
+            = [basePosition + 8 for basePosition in kingMoveSquares[position]]
+        kingMoveSquares[position].extend(lowerKingMoveSquares)
+    kingMoveSquares[position].remove(position)
 
 for offset in knight_move_offset:
     if offset > 0:
@@ -688,6 +714,9 @@ def getKingAttacks(notSamecolored: int, square: int):
     return KingAttacks[square] & notSamecolored
 
 
+# ================================================================
+
+
 def getKingSquare(bitBoardSet: list, colorOfKing: int) -> int:
     """
     return square of king for colorOfKing.
@@ -944,7 +973,7 @@ def possibleMove(bitBoardSet: list, board: list, currentPosition: int, sideToMov
     if pieceType == king:
         safeSquare = KingAttacks[currentPosition]
 
-        for possibleMove in kingMoveSqures[currentPosition]:
+        for possibleMove in kingMoveSquares[currentPosition]:
             if getAttackers(bitBoardSet, possibleMove, oppColorType):
                 safeSquare ^= (1 << possibleMove)
 
@@ -974,7 +1003,7 @@ def IsLegalMove(bitBoardSet: list, board: list, currentPosition: int, nextPositi
     return False
 
 
-def moveWithoutTest(bitBoardSet: list, currentPosition: int, nextPosition: int, colorType: int, pieceType: int, cpieceType: int = 0):
+def _moveWithoutTest(bitBoardSet: list, currentPosition: int, nextPosition: int, colorType: int, pieceType: int, cpieceType: int = 0):
     # https://www.chessprogramming.org/General_Setwise_Operations#Intersection
     # colorType: 1 or 2
     if colorType >> 1:
@@ -1003,8 +1032,11 @@ def moveWithoutTest(bitBoardSet: list, currentPosition: int, nextPosition: int, 
     bitBoardSet[nEmpty] ^= fromToBB
     bitBoardSet[nPiece] ^= fromToBB
 
-    return bitBoardSet
+    # TODO
+    # if pieceType == nKing:
+    #    self.PositionsOfKings[colorType] = nextPosition
 
+    return bitBoardSet
 
 def makeMove(bitBoardSet: int, board: int, currentPostion: int, nextPostion: int, castling: int = 4):
     # variables
@@ -1012,4 +1044,4 @@ def makeMove(bitBoardSet: int, board: int, currentPostion: int, nextPostion: int
     pieceType = pieceTypesToBBIndex[(board[currentPostion] & 0b11111100) >> 2]
     cpieceType = pieceTypesToBBIndex[(board[nextPostion] & 0b11111100) >> 2]
 
-    return moveWithoutTest(bitBoardSet, currentPostion, nextPostion, colorType, pieceType, cpieceType)
+    return _moveWithoutTest(bitBoardSet, currentPostion, nextPostion, colorType, pieceType, cpieceType)
