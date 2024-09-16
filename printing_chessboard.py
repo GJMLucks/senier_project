@@ -92,4 +92,4 @@ def printMove(move: Move):
     fromSquare = move.fromSquare
     toSquare = move.toSquare
     
-    print(f'move : {chr(ord('a') + (fromSquare & 0x7))}{chr(ord('1') + (fromSquare >> 3))}{chr(ord('a') + (toSquare & 0x7))}{chr(ord('1') + (toSquare >> 3))}')
+    print(f'move : {chr(ord('a') + (fromSquare & 0x7))}{chr(ord('1') + (fromSquare >> 3))}{chr(ord('a') + (toSquare & 0x7))}{chr(ord('1') + (toSquare >> 3))}', end = "")

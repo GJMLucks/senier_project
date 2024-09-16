@@ -275,12 +275,12 @@ queenAttacks = [rookAttacks[position] | bishopAttacks[position]
 
 # knight and king Attacks
 
-baseKingAttack = 0x01c1c1c0000000000000
-baseKnightAttack = 0x0
-
 kingMoveSquares = [[basePosition] for basePosition in range(64)]
 
 for position in range(64):
+    upperKingMoveSquares = []
+    lowerKingMoveSquares = []
+    
     if position & 0x7 != 0:
         kingMoveSquares[position].append(position - 1)
     if position & 0x7 != 7:
@@ -288,13 +288,17 @@ for position in range(64):
     if position >> 3 != 0:
         upperKingMoveSquares \
             = [basePosition - 8 for basePosition in kingMoveSquares[position]]
-        kingMoveSquares[position].extend(upperKingMoveSquares)
     if position >> 3 != 7:
         lowerKingMoveSquares \
             = [basePosition + 8 for basePosition in kingMoveSquares[position]]
-        kingMoveSquares[position].extend(lowerKingMoveSquares)
+    
+    kingMoveSquares[position].extend(upperKingMoveSquares)
+    kingMoveSquares[position].extend(lowerKingMoveSquares)
     kingMoveSquares[position].remove(position)
 
+
+baseKingAttack = 0x01c1c1c0000000000000
+baseKnightAttack = 0x0
 for offset in knight_move_offset:
     if offset > 0:
         baseKnightAttack |= (1 << 63) << offset
@@ -307,17 +311,19 @@ knightAttacks = [0x0 for _ in range(64)]
 for position in range(64):
     knightAttack = baseKnightAttack >> position
     kingAttack = baseKingAttack >> position
-
-    if (position & 0x7) >> 1 == 0x3:
+    
+    if (position & 0b110) == 0b110:
         knightAttack &= 0x3f3f3f3f3f3f3f3f
-        kingAttack &= 0x3f3f3f3f3f
-    elif (position & 0x7) >> 1 == 0x0:
+        kingAttack &= 0x3f3f3f3f3f3f3f3f
+    elif (position & 0b110) == 0x000:
         knightAttack &= 0xfcfcfcfcfcfcfcfc
         kingAttack &= 0xfcfcfcfcfcfcfcfc
 
     knightAttacks[63 - position] = knightAttack & 0xffffffffffffffff
     KingAttacks[63 - position] = kingAttack & 0xffffffffffffffff
 
+
+castlingWayMasks = [0x0000000000000060, 0x000000000000000e, 0x6000000000000000, 0x0e00000000000000]
 
 
 # population count

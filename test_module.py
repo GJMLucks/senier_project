@@ -4,6 +4,8 @@ from printing_chessboard import *
 
 # module that needs to be tested
 
+from chess_module import *
+
 from chess_bitmap_module import *
 from bit_board_chess import Chess
 
@@ -360,7 +362,19 @@ precalculatedPerftResult = [20, 400, 8902, 197281, 4865609, 119060324, 319590186
 if __name__ == '__main__':
     chess = Chess()
     
-    for testParameter in range(1, 6):
+    chess._set("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1")
+    printchess(chess.board)
+    
+    # chess.makeMove("g2g4")
+    
+    testParameter = 4
+    perftResult = chess.perftDivide(testParameter)
+    
+    print(f'Perft({testParameter}) : {perftResult}\n\n')
+    
+    raise Exception
+    
+    for testParameter in range(1, 5):
         chess.reset()
         perftResult = chess.perft(testParameter)
         if perftResult == precalculatedPerftResult[testParameter - 1]:

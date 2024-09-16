@@ -91,10 +91,11 @@ bitBoardDefaultSet = [
 
 @dataclass
 class Move:
-    fromSquare: int = 0     # 0..63
-    toSquare: int = 0       # 0..63
-    colorType: int = 0      # 0: white, 1: black
-    moveType: int = 0       # 0: empty, 1: normal movement, 2: promotion, 3: castling
-    capturedPiece: int = 0  # 0: empty
-    promotionPiece: int = 0  # 0: empty
+    fromSquare: int = 0         # 0..63
+    toSquare: int = 0           # 0..63
+    colorType: int = 0          # 0: white, 1: black
+    moveType: int = 0           # 0: empty, 1: normal movement, 2: promotion, 3: castling
+    capturedPiece: int = 0      # 0: empty
+    promotionPiece: int = 0     # 0: empty
     previousCastlingFlags: tuple[bool] = ()
+    previousEpTarget: int = 0   # 0: empty

@@ -72,15 +72,18 @@ class Chess():
         sideToMove = FENList[1]
         castling = FENList[2]
         enPassant = FENList[3]
-        halfMoveClock = FENList[4]
-        fullMoveCounter = FENList[5]
+        
+        if len(FENList) > 4:
+            halfMoveClock = FENList[4]
+            fullMoveCounter = FENList[5]
 
         # process
+        print(FENList)
         self.board = FENboard2board(placement)
         self.bitBoardSet = Board2BitBoardSet(self.board)
-        self.sideToMove = white if sideToMove[0].lower == 'w' else black
-        self.halfMoveClock = int(halfMoveClock)
-        self.fullMoveCounter = int(fullMoveCounter)
+        self.sideToMove = white if sideToMove[0].lower() == 'w' else black
+        self.halfMoveClock = int(halfMoveClock) if len(FENList) > 4 else 0
+        self.fullMoveCounter = int(fullMoveCounter) if len(FENList) > 4 else 0
         # castlingFlags
         for char in castling:
             if char == '-':
@@ -94,6 +97,7 @@ class Chess():
                 self.castlingFlags[2] = True
             if char == 'q':
                 self.castlingFlags[3] = True
+        
         # enPassantTarget
         for char in enPassant:
             if char == '-':
@@ -230,7 +234,7 @@ class Chess():
 
         return result
 
-    def _getAttackers(self, square: int, attackerColor: int, moveAssumption: int = 0) -> int:
+    def _getAttackers(self, square: int, attackerColor: int, moveFromBB: int = 0, moveToBB: int = 0) -> int:
         """
         get all attackers that are able to attack the square.
 
@@ -239,8 +243,11 @@ class Chess():
                 position of square that is being attacked.
             attackerColor (int): \n
                 color of attackers. 0 - nWhite, 1 - nBlack. same as isBlack
-            moveAssumption (int): \n
-                moveAssumption bitmap for assumption. default is 0x0.
+            moveFromBB (int): \n
+                bitmap of moving piece. default is 0.
+            moveToBB (int): \n
+                bitmap of moving piece. default is 0.
+            
         Raises:
             ValueError: \n
                 attackerColor is out of range
@@ -254,7 +261,9 @@ class Chess():
         if attackerColor >> 1:
             raise ValueError('attackerColor is out of range')
 
-        nPieceBB = self.bitBoardSet[nPiece] ^ moveAssumption
+        nPieceBB = self.bitBoardSet[nPiece]
+        nPieceBB |= moveToBB
+        nPieceBB ^= moveFromBB
 
         # process
         result = (getPawnAttacks(nPieceBB, square, attackerColor^0b1)
@@ -270,7 +279,10 @@ class Chess():
         result |= (getKingAttacks(nPieceBB, square)
                    & self.bitBoardSet[nKing])
 
-        return result & self.bitBoardSet[attackerColor]
+        result &= self.bitBoardSet[attackerColor]
+        result &= (0xffffffffffffffff ^ moveToBB)
+
+        return result
 
     def _getSafeMoveOfKing(self, colorOfKing: int) -> int:
         """
@@ -288,13 +300,13 @@ class Chess():
         # variables
         squareOfKing = self.PositionsOfKings[colorOfKing]
         result = KingAttacks[squareOfKing]
+        
 
         # process
         for possibleSquare in kingMoveSquares[squareOfKing]:
-            moveAssumptions = (1 << possibleSquare) | (1 << squareOfKing)
-            if self._getAttackers(possibleSquare, colorOfKing^0b1, moveAssumptions):    # oppColorType : nWhite, nBlack -> white, black
+            if self._getAttackers(possibleSquare, colorOfKing^0b1, (1 << squareOfKing), (1 << possibleSquare)):    # oppColorType : nWhite, nBlack -> white, black
                 result ^= (1 << possibleSquare)
-
+        
         return result & (self.bitBoardSet[nEmpty] | self.bitBoardSet[colorOfKing^0b1])
 
     def _possibleMove(self, currentPosition: int, sideToMove: int = 0) -> int:
@@ -344,7 +356,7 @@ class Chess():
 
         # raise for valid values
         if sideToMove and colorType == (sideToMove & 1):
-            raise ValueError("sideToMove and colorType are not matched")
+            raise ValueError(f'sideToMove and colorType are not matched - sideToMove : {sideToMove}, colorType : {colorType}, fromSquare : {fromSquare}, currentPosition : {currentPosition}')
         if pieceType == empty:
             raise ValueError("board and bitbaord are not matched")
 
@@ -412,13 +424,15 @@ class Chess():
                         | getPawnForward(self.bitBoardSet[nEmpty], currentPosition, colorType)
             enPassantTarget = self.enPassantTarget
             ePCurPos = enPassantTarget - 9 + (colorType << 4)
+            ePBB = 1 << enPassantTarget
             
             if enPassantTarget and (enPassantTarget & 0b000111) and (currentPosition == ePCurPos):
-                pawnPossible |= (1 << enPassantTarget)
+                pawnPossible |= ePBB
             if enPassantTarget and ((enPassantTarget + 1) & 0b000111) and (currentPosition == ePCurPos + 2):
-                # print(f'enPassantTarget : {self.enPassantTarget}, currentPosition : {currentPosition}')
-                pawnPossible |= (1 << enPassantTarget)
-
+                pawnPossible |= ePBB
+            # checked by en passant movement. it should be illegal
+            if (ePBB & pawnPossible) and self._getAttackers(kingPosition, oppColorType, ((1 << currentPosition) | (2 << ePCurPos)), ePBB):
+                pawnPossible ^= ePBB
             return possibleSquares & pawnPossible
         
         if pieceType & knight:
@@ -480,6 +494,116 @@ class Chess():
 
         return
 
+    def _changePiece(self, Square: int, piece: int) -> None:
+        '''
+        change piece on the square.
+        it doesn't care about the square is empty or not.
+        piece also could be empty.
+        if there is piece on the square, color is not changed.
+        
+        Args:
+            Square (int): \n
+                square of piece that is being change.
+            piece (int): \n
+                piece that is being change.
+                
+        Raises:
+            ValueError: \n
+                pieceType is not defined
+            ValueError: \n
+                colorType is not defined    
+        '''
+        
+        # variables and raises
+        squarePiece = self.board[Square ^ 0b111000]
+        
+        toPieceType = piece & 0b11111100
+        fromPieceType = squarePiece & 0b11111100
+        if piece and toPieceType not in pieceTypes:
+            raise ValueError("pieceType is not defined")
+        if squarePiece and fromPieceType not in pieceTypes:
+            raise ValueError("pieceType is not defined")
+        
+        colorType = piece & 0b11
+        if colorType == 3:
+            raise ValueError("colorType is not defined")
+        
+        squareBitmap = (1 << Square) & self.bitBoardSet[nPiece] # if piece in this square, then it is set. Otherwise 0
+        maskBitmap = colorType << Square                        # if piece is empty, then it is 0. Otherwise set
+        
+        colorType >>= 1
+        maskBitmap >>= colorType
+        
+        colorType |= (squarePiece & 0b11) >> 1
+        if colorType == 3:
+            raise ValueError("colorType is not defined")
+        
+        # process
+        
+        # bitmaps
+        
+        # if piece is set or removed, then process
+        self.bitBoardSet[nEmpty] ^= (squareBitmap ^ maskBitmap)
+        self.bitBoardSet[nPiece] ^= (squareBitmap ^ maskBitmap)
+        # if piece is not empty, then process
+        self.bitBoardSet[pieceTypesToBBIndex[fromPieceType >> 2]] ^= squareBitmap
+        self.bitBoardSet[pieceTypesToBBIndex[toPieceType >> 2]] |= maskBitmap
+        
+        self.bitBoardSet[colorType] ^= (squareBitmap ^ maskBitmap)
+        
+        # board
+        self.board[Square ^ 0b111000] = piece
+        
+        # print(f'After set piece : \n')
+        # printchess(self.board)
+
+        return
+
+    def _setPiece(self, Square: int, piece: int) -> None:
+        '''
+        set piece on the square. it doesn't care about the square is empty or not.
+        
+        Args:
+            Square (int): \n
+                square of piece that is being set.
+            piece (int): \n
+                piece that is being set.
+                
+        Raises:
+            ValueError: \n
+                pieceType is not defined
+            ValueError: \n
+                colorType is not defined    
+        '''        
+        # variables
+        pieceType = piece & 0b11111100
+        colorType = (piece & 0b11) - 1
+        squareBitmap = (1 << Square) & self.bitBoardSet[nEmpty] # if empty in this square, then it is set. Otherwise 0
+        
+        # raise
+        if pieceType not in pieceTypes:
+            raise ValueError("pieceType is not defined")
+        if colorType >> 1:
+            raise ValueError("colorType is not defined")
+
+        # process
+        
+        # bitmaps
+        # off nEmpty, on nPiece
+        self.bitBoardSet[nEmpty] ^= squareBitmap
+        self.bitBoardSet[nPiece] ^= squareBitmap
+        #
+        self.bitBoardSet[pieceTypesToBBIndex[pieceType >> 2]] |= squareBitmap
+        self.bitBoardSet[colorType] |= squareBitmap
+        
+        # board
+        self.board[Square ^ 0b111000] = piece
+        
+        # print(f'After set piece : \n')
+        # printchess(self.board)
+
+        return
+
     def _Promotion(self, square: int, pieceType: int) -> None:
         """
         update the board placement data by piece promotion.
@@ -498,17 +622,51 @@ class Chess():
         """
 
         # raise
-        if (pieceType & 0b11111100) not in pieceTypes:
-            raise ValueError("promotionPieceType is not defined")
+        if pieceType not in pieceTypes:
+            raise ValueError("promotionPieceType is not defined : {pieceType}")
         if self.board[square ^ 0b111000] & pawn == 0:
-            raise ValueError("promotion target is not pawn")
+            raise ValueError(f'promotion target is not pawn : {self.board[square ^ 0b111000]}')
 
         # board update
-        self.board[square ^ 0b111000] += ((pieceType & 0b11111100) - pawn)
+        self.board[square ^ 0b111000] += (pieceType - pawn)
 
         # bitboard update
         self.bitBoardSet[nPawn] ^= (1 << square)
         self.bitBoardSet[pieceTypesToBBIndex[pieceType >> 2]] ^= (1 << square)
+
+        return
+
+    def _UnPromotion(self, square: int, colorType: int) -> None:
+        """
+        unpromotion piece for unmake.
+
+        Args:
+            square (int): \n
+                square of piece that is being unpromoted.
+            colorType (int): \n
+                color of piece that is being unpromoted to.
+        
+        Raises:
+            ValueError: \n
+                if square is not in promotion area.
+            ValueError: \n
+                if unpromotion target is not pawn.
+        """
+
+        # raise
+        if (square & 0b111000) ^ (0b111000 >> (colorType << 3)):
+            raise ValueError("square is not in promotion area")
+        if self.board[square ^ 0b111000] & pawn:
+            raise ValueError(f'unpromotion target is pawn')
+
+        promotionPieceType = (self.board[square ^ 0b111000] & 0b11111100)
+
+        # board update
+        self.board[square ^ 0b111000] = ((self.board[square ^ 0b111000] & 0b11) | pawn)
+
+        # bitboard update
+        self.bitBoardSet[nPawn] ^= (1 << square)
+        self.bitBoardSet[pieceTypesToBBIndex[promotionPieceType >> 2]] ^= (1 << square)
 
         return
 
@@ -526,8 +684,12 @@ class Chess():
                 if castling is possible, return True. otherwise, return False.
         """
 
+        # print(f'castlingIndex : {castlingIndex}')
+        if (castlingIndex >> 1) == (2 >> self.sideToMove):
+            return False
         if self.castlingFlags[castlingIndex] == False:
             return False
+        
 
         # variables
         # types
@@ -535,21 +697,28 @@ class Chess():
         isKingSide = (castlingIndex + 1) & 0b1
         # squares
         kingSquare = 4 + 56*colorType
-        # mask
-        # ob00001110 or 0b01100000
-        nPieceMask = (0b110 + isKingSide) << (1 << (isKingSide << 1))
-
+        
         # process
         # is there a any piece in the castling way?
-        if self.bitBoardSet[nPiece] & (nPieceMask << 56*colorType):
+        
+        # print(f'castlingIndex : {castlingIndex}')
+        if (self.bitBoardSet[nPiece] & castlingWayMasks[castlingIndex]):
             return False
         # current king, castling king and route is not checked?
+        
+        # print(f'castlingIndex : {castlingIndex}')
         if self._getAttackers(kingSquare, colorType^0b1):
             return False
+        
+        # print(f'castlingIndex : {castlingIndex}')
         if self._getAttackers(2 + (isKingSide << 2) + 56*colorType, colorType^0b1):
             return False
+        
+        # print(f'castlingIndex : {castlingIndex}')
         if self._getAttackers(3 + (isKingSide << 1) + 56*colorType, colorType^0b1):
             return False
+        
+        # print(f'castlingIndex : {castlingIndex}')
 
         return True
     
@@ -557,6 +726,7 @@ class Chess():
         """
         castling only it is possible.
         this function also checking if castlingFlag is set
+        this function anly updates kingsPos and castlingFlags
 
         Args:
             castlingIndex (int): \n
@@ -567,7 +737,7 @@ class Chess():
                 if castling is possible, return True. otherwise, return False.
         """
 
-        if self._IsCastling[castlingIndex] == False:
+        if self._IsCastling(castlingIndex) == False:
             return False
 
         # variables
@@ -578,8 +748,6 @@ class Chess():
         kingSquare = 4 + 56*colorType
         kingToSquare = (kingSquare - 2) + (isKingSide << 2)
         rookSquare = 7*(isKingSide) + 56*colorType
-        # flag
-        previousCastlingFlags = self.castlingFlags.copy()
 
         # move
         self._moveWithoutTest(
@@ -593,10 +761,6 @@ class Chess():
         # castling flags
         self.castlingFlags[colorType << 1] = False
         self.castlingFlags[(colorType << 1) + 1] = False
-        # move list
-        self.moveList[self.moveListCurrent] = Move(
-            kingSquare, (kingSquare - 2) + (isKingSide << 2), colorType, 3, empty, tuple(previousCastlingFlags))
-        self.moveListCurrent += 1
 
         return True
 
@@ -618,6 +782,10 @@ class Chess():
 
         toBB = 1 << nextPosition
 
+        enPassantTarget = self.enPassantTarget
+
+        result = False
+
         # raise
         if self.bitBoardSet[colorType] & toBB:
             raise ValueError(
@@ -626,31 +794,46 @@ class Chess():
         # castling
         if pieceType == nKing:
             if pureCoordinate == "e1g1":
-                return self._castling(0)
+                result = self._castling(0)
             if pureCoordinate == "e1c1":
-                return self._castling(1)
+                result = self._castling(1)
             if pureCoordinate == "e8g8":
-                return self._castling(2)
+                result = self._castling(2)
             if pureCoordinate == "e8c8":
-                return self._castling(3)
+                result = self._castling(3)
+            
+            if result:
+                moveType = 4
 
-        # filter Illegal move
-        if (self._possibleMove(currentPosition) & toBB) == 0:
+        # filter Illegal move, it is not check castling
+        if (result == False) and (self._possibleMove(currentPosition) & toBB) == 0:
             return False
 
         # normal move
-        self._moveWithoutTest(currentPosition, nextPosition,
+        if result == False:
+            self._moveWithoutTest(currentPosition, nextPosition,
                               colorType, pieceType, pieceTypesToBBIndex[(cpiece & 0b11111100) >> 2])
-
+            moveType = 1
+        
+        # en passant capture
+        # if enPassantTarget:
+            # print(f'enPassantTarget : {enPassantTarget}, nextPosition : {nextPosition}, pieceType : {pieceType}')
+        if enPassantTarget and nextPosition == enPassantTarget and pieceType == nPawn:
+            # print(enPassantTarget - 8 + (colorType << 4))
+            self._changePiece(enPassantTarget - 8 + (colorType << 4), empty)    # remove capture piece
+        
         # promotion
         if promoPieceType:
-            self._Promotion(nextPosition, promoPieceType)
+            self._changePiece(nextPosition, (promoPieceType | colorType + 1))
             moveType = 2
+
+
+        # [ update process ]
 
         # update king square
         if pieceType == nKing:
             self.PositionsOfKings[colorType] = nextPosition
-
+        
         # update castling flags: if king moves, remove castling flags
         if pieceType == nKing:
             self.castlingFlags[colorType << 1] = False
@@ -666,7 +849,7 @@ class Chess():
             if currentPosition == 54:
                 self.castlingFlags[3] = False
         # if capture is rook, then remove castling flags
-        if (cpiece == nRook) and (0x8100000000000081 & toBB):
+        if (cpiece & rook) and (0x8100000000000081 & toBB):
             if nextPosition == 7:
                 self.castlingFlags[0] = False
             if nextPosition == 0:
@@ -681,13 +864,18 @@ class Chess():
         
         if (pieceType == nPawn) and (currentPosition + 16 == nextPosition + colorType*32):
             self.enPassantTarget = (currentPosition + nextPosition) >> 1
+        #     print(f'enPassantTarget : {self.enPassantTarget}')
 
         # move list
         self.moveList[self.moveListCurrent] = Move(
             currentPosition, nextPosition, colorType, moveType, cpiece, promoPieceType, tuple(self.castlingFlags.copy()))
         self.moveListCurrent += 1
         
-        # update chess state
+        # print(f'After make : {pureCoordinate}')
+        # printBitMaps(self.bitBoardSet)
+        # printchess(self.board)
+        
+        # chess state
         self.nextRound()
 
         return True
@@ -708,8 +896,10 @@ class Chess():
 
         cpiece = move.capturedPiece
 
+        enPassantTarget = move.previousEpTarget
+
         # castling
-        if moveType == 3:
+        if (moveType & 0b100):
             if nextPosition == 6:
                 self._castling(0)
             if nextPosition == 2:
@@ -720,13 +910,23 @@ class Chess():
                 self._castling(3)
 
         # normal move
-        if moveType == 1:
+        if (moveType & 0b11):
             self._moveWithoutTest(currentPosition, nextPosition,
                               colorType, pieceType, pieceTypesToBBIndex[(cpiece & 0b11111100) >> 2])
 
+        # en passant capture
+        # print(f'enPassantTarget : {enPassantTarget}')
+        # if enPassantTarget:
+        #     print(f'nextPosition : {nextPosition}, pieceType : {pieceType}')
+        if enPassantTarget and nextPosition == enPassantTarget and pieceType == nPawn:
+            self._changePiece(enPassantTarget - 8 + (colorType << 4), empty)    # remove capture piece
+
         # promotion
-        if moveType == 2:
-            self._Promotion(nextPosition, promoPieceType)
+        if (moveType & 0b10):
+            self._changePiece(nextPosition, (promoPieceType | colorType + 1))
+
+
+        # [ update process ]
 
         # update king square
         if pieceType == nKing:
@@ -747,7 +947,7 @@ class Chess():
             if currentPosition == 54:
                 self.castlingFlags[3] = False
         # if capture is rook, then remove castling flags
-        if (cpiece == nRook) and (0x8100000000000081 & (1 << nextPosition)):
+        if (cpiece & rook) and (0x8100000000000081 & (1 << nextPosition)):
             if nextPosition == 7:
                 self.castlingFlags[0] = False
             if nextPosition == 0:
@@ -762,41 +962,18 @@ class Chess():
         
         if (pieceType == nPawn) and (currentPosition + 16 == nextPosition + colorType*32):
             self.enPassantTarget = (currentPosition + nextPosition) >> 1
-
+        #     print(f'enPassantTarget : {self.enPassantTarget}')
+            
         # move list
         self.moveList[self.moveListCurrent] = Move(
-            currentPosition, nextPosition, colorType, moveType, cpiece, tuple(self.castlingFlags.copy()))
+            currentPosition, nextPosition, colorType, moveType, cpiece, promoPieceType, move.previousCastlingFlags)
         self.moveListCurrent += 1
         
         # update chess state
         self.nextRound()
         
         # print(f'After make : {move}')
-        # printchess(self.board)
-
-        return
-
-    def _setPiece(self, Square: int, piece: int) -> None:
-        pieceType = piece & 0b11111100
-        colorType = (piece & 0b11) - 1
-        squareBitmap = 1 << Square
-        # raise
-        if pieceType not in pieceTypes:
-            raise ValueError("pieceType is not defined")
-        if colorType >> 1:
-            raise ValueError("colorType is not defined")
-
-        # process
-        
-        # bitmaps
-        self.bitBoardSet[nEmpty] ^= squareBitmap
-        self.bitBoardSet[nPiece] ^= squareBitmap
-        self.bitBoardSet[pieceTypesToBBIndex[pieceType >> 2]] |= squareBitmap
-        self.bitBoardSet[colorType] |= squareBitmap
-        # board
-        self.board[Square ^ 0b111000] = piece
-        
-        # print(f'After set piece : \n')
+        # printBitMaps(self.bitBoardSet)
         # printchess(self.board)
 
         return
@@ -809,14 +986,17 @@ class Chess():
 
         toSquare = move.toSquare
         fromSquare = move.fromSquare
+        
         colorType = move.colorType
         pieceType = pieceTypesToBBIndex[(self.board[toSquare ^ 0b111000] & 0b11111100) >> 2]
+        
         capturedPiece = move.capturedPiece
         moveType = move.moveType
+        previousEpTarget = move.previousEpTarget
 
         # unpromotion
-        if moveType == 2:
-            self._Promotion(toSquare, pawn)
+        if (moveType & 0b10):
+            self._changePiece(toSquare, (pawn | colorType + 1))
 
         # unmake move
         self.castlingFlags = list(move.previousCastlingFlags)
@@ -824,18 +1004,22 @@ class Chess():
 
         # undo capture
         if capturedPiece:
-            self._setPiece(toSquare, capturedPiece)
+            self._changePiece(toSquare, capturedPiece)
+        # undo en passant capture
+        if previousEpTarget and (toSquare == previousEpTarget):
+            self._changePiece(toSquare - 8 + (colorType << 4), (pawn | (colorType + 1) ^ 0b11))
 
         # update king square
         if pieceType == nKing:
             self.PositionsOfKings[colorType] = fromSquare
 
         # undo castling: undo rook move
-        if moveType == 3:
+        if (moveType & 0b100):
             self._moveWithoutTest((toSquare + fromSquare) >> 1, (((toSquare >> 2) & 0b1)*7 + (
                 toSquare >> 5)*56), colorType, pieceType, empty)
 
         # update chess state
+        self.enPassantTarget = previousEpTarget
         self.undoRound()
 
         return
@@ -847,14 +1031,18 @@ class Chess():
 
         toSquare = move.toSquare
         fromSquare = move.fromSquare
+        
         colorType = move.colorType
         pieceType = pieceTypesToBBIndex[(self.board[toSquare ^ 0b111000] & 0b11111100) >> 2]
+        
         capturedPiece = move.capturedPiece
         moveType = move.moveType
+        previousEpTarget = move.previousEpTarget
 
-        # unpromotion
-        if moveType == 2:
-            self._Promotion(toSquare, pawn)
+        # unUnpromotion
+        if (moveType & 0b10):
+            self._changePiece(toSquare, (pawn | colorType + 1))
+            pieceType = nPawn
 
         # unmake move
         self.castlingFlags = list(move.previousCastlingFlags)
@@ -863,23 +1051,29 @@ class Chess():
         # undo capture
         if capturedPiece:
             # print(f'toSquare : {toSquare}, capturedPiece : {capturedPiece}')
-            self._setPiece(toSquare, capturedPiece)
+            self._changePiece(toSquare, capturedPiece)
+        # undo en passant capture
+        if previousEpTarget and (toSquare == previousEpTarget):
+            self._changePiece(toSquare - 8 + (colorType << 4), (pawn | (colorType + 1) ^ 0b11))
+
 
         # update king square
         if pieceType == nKing:
             self.PositionsOfKings[colorType] = fromSquare
 
         # undo castling: undo rook move
-        if moveType == 3:
+        if (moveType & 0b100):
             self._moveWithoutTest((toSquare + fromSquare) >> 1, (((toSquare >> 2) & 0b1)*7 + (
-                toSquare >> 5)*56), colorType, pieceType, empty)
+                toSquare >> 5)*56), colorType, nRook, empty)
 
         # update chess state
+        self.enPassantTarget = previousEpTarget
         self.undoRound()
         
-        # print(f'After unMake : {move}')
-        # printchess(self.board)
         
+        # print(f'After unMake : {move}')
+        # printBitMaps(self.bitBoardSet)
+        # printchess(self.board)
         return
 
 
@@ -900,7 +1094,8 @@ class Chess():
         """
 
         moveList = []
-        castlingFlags = self.castlingFlags
+        castlingFlags = self.castlingFlags.copy()
+        EpTarget = self.enPassantTarget
 
         for index in range(4):
             if self._IsCastling(index):
@@ -913,8 +1108,11 @@ class Chess():
                 kingToSquare = (kingSquare - 2) + (isKingSide << 2)
                 
                 moveList.append(
-                        Move(kingSquare, kingToSquare, colorType, 3, empty, empty, castlingFlags))
+                        Move(kingSquare, kingToSquare, colorType, 4, empty, empty, castlingFlags))
 
+        # printchess(self.board)
+        # printBitMaps(self.bitBoardSet)
+        
         for currentPos in range(63, -1, -1):
             possibleMoveBB = self._possibleMove(currentPos, sideToMove)
 
@@ -937,17 +1135,17 @@ class Chess():
                     if (piece == white + pawn and (nextPos & 0b111000) == 56) or \
                         (piece == black + pawn and (nextPos & 0b111000) == 0):
                         moveList.append(
-                            Move(currentPos, nextPos, colorType, 2, cpiece, (1 << 3), castlingFlags))
+                            Move(currentPos, nextPos, colorType, 2, cpiece, (1 << 3), castlingFlags, EpTarget))
                         moveList.append(
-                            Move(currentPos, nextPos, colorType, 2, cpiece, (1 << 4), castlingFlags))
+                            Move(currentPos, nextPos, colorType, 2, cpiece, (1 << 4), castlingFlags, EpTarget))
                         moveList.append(
-                            Move(currentPos, nextPos, colorType, 2, cpiece, (1 << 5), castlingFlags))
+                            Move(currentPos, nextPos, colorType, 2, cpiece, (1 << 5), castlingFlags, EpTarget))
                         moveList.append(
-                            Move(currentPos, nextPos, colorType, 2, cpiece, (1 << 6), castlingFlags))
+                            Move(currentPos, nextPos, colorType, 2, cpiece, (1 << 6), castlingFlags, EpTarget))
                         continue
 
                     moveList.append(
-                        Move(currentPos, nextPos, colorType, 1, cpiece, empty, castlingFlags))
+                        Move(currentPos, nextPos, colorType, 1, cpiece, empty, castlingFlags, EpTarget))
                     continue
 
                 break
@@ -981,7 +1179,7 @@ class Chess():
         for move in possibleMoveList:
             self.makeMove(move)
             # if depth >> 1:
-            #     printMove(move)
+            #   printMove(move)
             nodes += self.perft(depth - 1)
             self.unMakeMove(move)
         
@@ -1010,7 +1208,7 @@ class Chess():
             return 1
 
         possibleMoveList = self._getMoveList(self.sideToMove)
-
+        
         print(f'len( possibleMoveList ) : \n{len(possibleMoveList)}\n')
         # printBitMaps(self.bitBoardSet)
 
@@ -1024,9 +1222,10 @@ class Chess():
         
         for index, node in enumerate(divideList):
             printMove(possibleMoveList[index])
+            # print(possibleMoveList[index])
             print(f' : {node}')
         
-        print(f'nodes : {nodes}')
+        # print(f'nodes : {nodes}')
         return nodes
 
     # =================================================================
