@@ -367,7 +367,7 @@ if __name__ == '__main__':
     
     # chess.makeMove("g2g4")
     
-    testParameter = 4
+    testParameter = 3
     perftResult = chess.perftDivide(testParameter)
     
     print(f'Perft({testParameter}) : {perftResult}\n\n')

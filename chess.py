@@ -1,12 +1,6 @@
 from const_variable import *
 from printing_chessboard import *
 
-
-bitBoardSet: list[int] = bitBoardDefaultSet
-
-
-
-
 class Chess():
     def __init__(self):
 
