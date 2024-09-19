@@ -357,30 +357,69 @@ class BitBoardTest(unittest.TestCase):
                                 \n piece : \n{str(testBoard[(8*(7 - (currentPosition >> 3)) + (currentPosition & 0b111))])}\
                                 \n bitboard : \n{getBitBoardSetString(testBBs)}")
 
-precalculatedPerftResult = [20, 400, 8902, 197281, 4865609, 119060324, 3195901860, 84998978956, 2439530234167, 69352859712417]
+
+# precalculated perft results
+perftTestcasesResults = \
+    [[20, 400, 8902, 197281, 4865609],
+     [48, 2039, 97862, 4085603, 193690690],
+     [14, 191, 2812, 43238, 674624],
+     [6, 264, 9467, 422333, 15833292],
+     [44, 1486, 62379, 2103487, 89941194],
+     [46, 2079, 89890, 3894594, 164075551]]
+
+# initial Positions for perft test
+perftTestInitPositions = \
+    ["rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+     "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -",
+     "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -",
+     "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
+     "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8",
+     "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10"]
 
 if __name__ == '__main__':
+    f = open("test_result.txt", "a")
+    
     chess = Chess()
     
-    chess._set("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1")
-    printchess(chess.board)
-    
-    # chess.makeMove("g2g4")
-    
-    testParameter = 3
-    perftResult = chess.perftDivide(testParameter)
-    
-    print(f'Perft({testParameter}) : {perftResult}\n\n')
-    
-    raise Exception
-    
-    for testParameter in range(1, 5):
+    # basic testcase
+    for depth in range(1, 6):
+        # set initial position
         chess.reset()
-        perftResult = chess.perft(testParameter)
-        if perftResult == precalculatedPerftResult[testParameter - 1]:
-            print(f'Perft({testParameter}) : {perftResult}\n\n')
+        chess._set(perftTestInitPositions[0])
+
+        # process
+        perftResult = chess.perftDivide(depth)
+        if perftResult == perftTestcasesResults[0][depth - 1]:
+            print(f'Perft({depth}) : {perftResult}')
+            print(f'testcase0 - depth {depth} Done')
+            f.write(f'Perft({depth}) : {perftResult}\n')
+            f.write(f'testcase0 - depth {depth} Done\n')
         else:
-            print(f'Perft({testParameter}) : {perftResult} (wrong)\n\n')    
+            print(f'Perft({depth}) : {perftResult} (wrong)\n')
+            f.write(f'Perft({depth}) : {perftResult} (wrong)\n')
+            f.close()
             raise Exception
+
+    # testcase 2 ~ 6
+    for testcaseIndex in range(1, 6):
+        for depth in range(1, 5):
+            # set initial position
+            chess.reset()
+            chess._set(perftTestInitPositions[testcaseIndex])
+
+            # process
+            perftResult = chess.perftDivide(depth)
+            if perftResult == perftTestcasesResults[testcaseIndex][depth - 1]:
+                print(f'Perft({depth}) : {perftResult}')
+                print(f'testcase{testcaseIndex+1} - depth {depth} Done')
+                f.write('Perft({depth}) : {perftResult}\n')
+                f.write(f'testcase{testcaseIndex+1} - depth {depth} Done\n')
+            else:
+                print(f'Perft({depth}) : {perftResult} (wrong)\n')
+                f.write('Perft({depth}) : {perftResult} (wrong)\n')
+                f.close()
+                raise Exception
+
+    f.close()
 
     # temp code : unittest.main()

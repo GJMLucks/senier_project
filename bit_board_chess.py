@@ -78,7 +78,7 @@ class Chess():
             fullMoveCounter = FENList[5]
 
         # process
-        print(FENList)
+        # print(FENList)
         self.board = FENboard2board(placement)
         self.bitBoardSet = Board2BitBoardSet(self.board)
         self.sideToMove = white if sideToMove[0].lower() == 'w' else black
@@ -846,7 +846,7 @@ class Chess():
                 self.castlingFlags[1] = False
             if currentPosition == 63:
                 self.castlingFlags[2] = False
-            if currentPosition == 54:
+            if currentPosition == 56:
                 self.castlingFlags[3] = False
         # if capture is rook, then remove castling flags
         if (cpiece & rook) and (0x8100000000000081 & toBB):
@@ -856,7 +856,7 @@ class Chess():
                 self.castlingFlags[1] = False
             if nextPosition == 63:
                 self.castlingFlags[2] = False
-            if nextPosition == 54:
+            if nextPosition == 56:
                 self.castlingFlags[3] = False
 
         # set en passant target
@@ -871,9 +871,10 @@ class Chess():
             currentPosition, nextPosition, colorType, moveType, cpiece, promoPieceType, tuple(self.castlingFlags.copy()))
         self.moveListCurrent += 1
         
-        # print(f'After make : {pureCoordinate}')
-        # printBitMaps(self.bitBoardSet)
-        # printchess(self.board)
+        print(f'After make : {pureCoordinate}')
+        print(f'castlingFlags: {self.castlingFlags.copy()}')
+        printBitMaps(self.bitBoardSet)
+        printchess(self.board)
         
         # chess state
         self.nextRound()
@@ -944,7 +945,7 @@ class Chess():
                 self.castlingFlags[1] = False
             if currentPosition == 63:
                 self.castlingFlags[2] = False
-            if currentPosition == 54:
+            if currentPosition == 56:
                 self.castlingFlags[3] = False
         # if capture is rook, then remove castling flags
         if (cpiece & rook) and (0x8100000000000081 & (1 << nextPosition)):
@@ -954,7 +955,7 @@ class Chess():
                 self.castlingFlags[1] = False
             if nextPosition == 63:
                 self.castlingFlags[2] = False
-            if nextPosition == 54:
+            if nextPosition == 56:
                 self.castlingFlags[3] = False
 
         # set en passant target
@@ -1183,7 +1184,7 @@ class Chess():
             nodes += self.perft(depth - 1)
             self.unMakeMove(move)
         
-        print(f'nodes : {nodes}')
+        # print(f'nodes : {nodes}')
         return nodes
 
     def perftDivide(self, depth: int) -> int:
@@ -1209,7 +1210,7 @@ class Chess():
 
         possibleMoveList = self._getMoveList(self.sideToMove)
         
-        print(f'len( possibleMoveList ) : \n{len(possibleMoveList)}\n')
+        # print(f'len( possibleMoveList ) : \n{len(possibleMoveList)}\n')
         # printBitMaps(self.bitBoardSet)
 
         for index, move in enumerate(possibleMoveList):
@@ -1220,11 +1221,11 @@ class Chess():
             
             self.unMakeMove(move)
         
-        for index, node in enumerate(divideList):
-            printMove(possibleMoveList[index])
+        # for index, node in enumerate(divideList):
+            # printMove(possibleMoveList[index])
             # print(possibleMoveList[index])
-            print(f' : {node}')
-        
+            # print(f' : {node}')
+
         # print(f'nodes : {nodes}')
         return nodes
 

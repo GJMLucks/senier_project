@@ -1,0 +1,50 @@
+Perft(1) : 20
+testcase0 - depth 1 Done
+Perft(2) : 400
+testcase0 - depth 2 Done
+Perft(3) : 8902
+testcase0 - depth 3 Done
+Perft(4) : 197281
+testcase0 - depth 4 Done
+Perft(5) : 4865609
+testcase0 - depth 5 Done
+Perft({depth}) : {perftResult}
+testcase2 - depth 1 Done
+Perft({depth}) : {perftResult}
+testcase2 - depth 2 Done
+Perft({depth}) : {perftResult}
+testcase2 - depth 3 Done
+Perft({depth}) : {perftResult}
+testcase2 - depth 4 Done
+Perft({depth}) : {perftResult}
+testcase3 - depth 1 Done
+Perft({depth}) : {perftResult}
+testcase3 - depth 2 Done
+Perft({depth}) : {perftResult}
+testcase3 - depth 3 Done
+Perft({depth}) : {perftResult}
+testcase3 - depth 4 Done
+Perft({depth}) : {perftResult}
+testcase4 - depth 1 Done
+Perft({depth}) : {perftResult}
+testcase4 - depth 2 Done
+Perft({depth}) : {perftResult}
+testcase4 - depth 3 Done
+Perft({depth}) : {perftResult}
+testcase4 - depth 4 Done
+Perft({depth}) : {perftResult}
+testcase5 - depth 1 Done
+Perft({depth}) : {perftResult}
+testcase5 - depth 2 Done
+Perft({depth}) : {perftResult}
+testcase5 - depth 3 Done
+Perft({depth}) : {perftResult}
+testcase5 - depth 4 Done
+Perft({depth}) : {perftResult}
+testcase6 - depth 1 Done
+Perft({depth}) : {perftResult}
+testcase6 - depth 2 Done
+Perft({depth}) : {perftResult}
+testcase6 - depth 3 Done
+Perft({depth}) : {perftResult}
+testcase6 - depth 4 Done
