@@ -7,6 +7,8 @@ from chess_bitmap_module import *
 
 from multipledispatch import dispatch
 
+import numpy as np
+
 # ======== class ======== #
 class Chess():
     def __init__(self):
@@ -65,23 +67,40 @@ class Chess():
 
         return
 
-    def _set(self, FEN: str) -> None:
+    def _set(self, side: str = "", board: list[int] = "", FEN: list[str] = "") -> None:
         # variables
+        placement = board
+        sideToMove = side
+        castling = "KQkq"
+        enPassant = "-"
+
         FENList = FEN.split(" ")
-        placement = FENList[0]
-        sideToMove = FENList[1]
-        castling = FENList[2]
-        enPassant = FENList[3]
-        
-        if len(FENList) > 4:
+
+        if FEN != "":
+            FENList = FEN.split(" ")
+            placement = FENList[0]
+            sideToMove = FENList[1]
+            castling = FENList[2]
+            enPassant = FENList[3]
+        else:
+            FENList = []
+
+        if FEN != "" and len(FENList) > 4:
             halfMoveClock = FENList[4]
             fullMoveCounter = FENList[5]
 
         # process
         # print(FENList)
-        self.board = FENboard2board(placement)
+        if board != "":
+            self.board = board
+        else:
+            self.board = FENboard2board(placement)
         self.bitBoardSet = Board2BitBoardSet(self.board)
+
+        if side != '':
+            sideToMove = side
         self.sideToMove = white if sideToMove[0].lower() == 'w' else black
+
         self.halfMoveClock = int(halfMoveClock) if len(FENList) > 4 else 0
         self.fullMoveCounter = int(fullMoveCounter) if len(FENList) > 4 else 0
         # castlingFlags
@@ -97,7 +116,7 @@ class Chess():
                 self.castlingFlags[2] = True
             if char == 'q':
                 self.castlingFlags[3] = True
-        
+
         # enPassantTarget
         for char in enPassant:
             if char == '-':
@@ -449,48 +468,72 @@ class Chess():
         # exception handling
         raise ValueError("pieceType is not defined")
 
+    def _possiblePromotion(self, sideToMove: int) -> list[int]:
+        """
+        get bitmap of possible promotion for sideToMove.
+
+        Args:
+            sideToMove (int): \n
+                side to move. 1 - white, 2 - black
+        
+        Returns:
+            possiblePromotionFile (list[8bit]): \n
+                list of possible promotion file. \n
+                [0] - left forward mov,  \n
+                [1] - forward mov,  \n
+                [2] - right forward mov \n
+        """
+        if sideToMove and (sideToMove - 1) >> 1 == 0:
+            pass
+        else:
+            raise ValueError("sideToMove is not valid")
+
+        colorPawnBB = self.bitBoardSet[nPawn] & self.bitBoardSet[sideToMove - 1]
+        result = [0 for _ in range(3)]
+        possiblePromotionFiles = [0 for _ in range(3)]
+        curPos = 87 - (sideToMove * 40)
+        mask = 1 << curPos
+
+        for _ in range(8):
+            curPos += 1
+            mask <<= 1
+
+            if colorPawnBB & mask:
+                possibleMoveBB = self._possibleMove(curPos, sideToMove)
+
+                nextPosMask = mask >> 7
+                if sideToMove == white:
+                    nextPosMask <<= 16
+
+                for index in range(2, -1, -1):
+                    if nextPosMask & possibleMoveBB:
+                        possiblePromotionFiles[index] |= (
+                            1 << (curPos & 0b111))
+                        result[index] |= (1 << ((curPos & 0b111) << 2))
+                    nextPosMask >>= 1
+            else:
+                continue
+
+        for index in range(3):
+            result[index]*0b1111
+            if sideToMove == black:
+                result[index] <<= 32
+
+        return result, possiblePromotionFiles
+
     # update chess state
     
 
     # movement functions
 
-    def _moveWithoutTest(self, currentPosition: int, nextPosition: int, colorType: int, pieceType: int, cpieceType: int) -> None:
+    def _moveWithoutTest(self, sideToMove: int) -> list[int]:
         """
-        update the board placement data by piece movement.
-        there is no handling. all parameters should be BBIndex.
+        get all possible moves without check.
 
         Args:
-            currentPosition (int): \n
-                square of piece that is being moved.
-            nextPosition (int): \n
-                square of piece that is being moved to.
-            colorType (int): \n
-                color of piece that is being moved. 0, 1
-            pieceType (int): \n
-                type of piece that is being moved. 2 ~ 7
-            cpieceType (int): \n
-                type of piece that is being captured. 2 ~ 7. if movement is not capturing, 0.
+            sideToMove (int): \n
+                side to move. 1 - white, 2 - black
         """
-
-        # process
-        fromBB = 1 << currentPosition
-        ToBB = 1 << nextPosition
-        fromToBB = fromBB ^ ToBB
-
-        self.bitBoardSet[pieceType] ^= fromToBB
-        self.bitBoardSet[colorType] ^= fromToBB
-
-        # capture case
-        if cpieceType:
-            self.bitBoardSet[1 - colorType] ^= ToBB
-            self.bitBoardSet[cpieceType] ^= ToBB
-            self.bitBoardSet[nEmpty] ^= ToBB
-            self.bitBoardSet[nPiece] ^= ToBB
-
-        self.bitBoardSet[nEmpty] ^= fromToBB
-        self.bitBoardSet[nPiece] ^= fromToBB
-
-        self.board = Bitmaps2Board(self.bitBoardSet)
 
         return
 
@@ -1229,9 +1272,115 @@ class Chess():
         # print(f'nodes : {nodes}')
         return nodes
 
-    # =================================================================
+    # ================================ possibleBit ================================ #
 
-    
+    def getPossibleMoveBBs(self, sideToMove: int) -> list[list[int]]:
+        """
+        Get possible move bitboards for sideToMove.
+        
+        Args:
+            sideToMove (int, optional): 1 is white, 2 is black. Defaults to 0.
+
+        Returns:
+            list[list[int]]: possible move bitboards for sideToMove.
+        """
+        possibleMoveBBs = emptyPossibleMovBBs.copy()
+
+        possiblePromotionBBs, possiblePromotionFiles = self._possiblePromotion(
+            sideToMove)
+
+        for currentPos in range(64):
+            possibleMoveBBs[currentPos] = Bitmap2matrix(
+                self._possibleMove(currentPos, sideToMove))
+
+        for index in range(3):
+            for file in range(8):
+                # remove non-promotion moves
+                if possiblePromotionFiles[index] & (1 << file):
+                    curPos = 88 - sideToMove*40 + file
+                    nextPos = curPos + 23 - sideToMove*16 + index
+                    possibleMoveBBs[curPos][nextPos] = 0
+
+            # append the promotion moves
+            possibleMoveBBs[64 +
+                            index] = Bitmap2matrix(possiblePromotionBBs[index])
+
+        return possibleMoveBBs
+
+    def _getMoveList(self, sideToMove: int = 0) -> list:
+        """
+        return a list of possible movement for sideToMove.
+        if sideToMove is not defined, return a list of all possible movement.
+
+        Args:
+            sideToMove (int, optional): \n
+                side to move. 0 - none, 1 - white, 2 - black. Defaults to 0.
+
+        Returns:
+            Movelist (list[tuple[int]]): \n
+                list of possible movement.
+        """
+
+        moveList = []
+        castlingFlags = self.castlingFlags.copy()
+        EpTarget = self.enPassantTarget
+
+        for index in range(4):
+            if self._IsCastling(index):
+                # variables
+                # types
+                colorType = index >> 1  # 0 - white, 1 - black
+                isKingSide = (index + 1) & 0b1
+                # squares
+                kingSquare = 4 + 56*colorType
+                kingToSquare = (kingSquare - 2) + (isKingSide << 2)
+
+                moveList.append(
+                    Move(kingSquare, kingToSquare, colorType, 4, empty, empty, castlingFlags))
+
+        # printchess(self.board)
+        # printBitMaps(self.bitBoardSet)
+
+        for currentPos in range(63, -1, -1):
+            possibleMoveBB = self._possibleMove(currentPos, sideToMove)
+
+            if possibleMoveBB == 0:
+                continue
+
+            piece = self.board[currentPos ^ 0b111000]
+
+            for _ in range(64):
+                if possibleMoveBB:
+                    # variables
+                    nextPos = bitScan(possibleMoveBB, False)
+                    colorType = sideToMove >> 1
+                    cpiece = self.board[nextPos ^ 0b111000]
+
+                    # update possibleMoveBB
+                    possibleMoveBB &= (possibleMoveBB - 1)
+
+                    # promotion case
+                    if (piece == white + pawn and (nextPos & 0b111000) == 56) or \
+                            (piece == black + pawn and (nextPos & 0b111000) == 0):
+                        moveList.append(
+                            Move(currentPos, nextPos, colorType, 2, cpiece, (1 << 3), castlingFlags, EpTarget))
+                        moveList.append(
+                            Move(currentPos, nextPos, colorType, 2, cpiece, (1 << 4), castlingFlags, EpTarget))
+                        moveList.append(
+                            Move(currentPos, nextPos, colorType, 2, cpiece, (1 << 5), castlingFlags, EpTarget))
+                        moveList.append(
+                            Move(currentPos, nextPos, colorType, 2, cpiece, (1 << 6), castlingFlags, EpTarget))
+                        continue
+
+                    moveList.append(
+                        Move(currentPos, nextPos, colorType, 1, cpiece, empty, castlingFlags, EpTarget))
+                    continue
+
+                break
+
+        return moveList
+
+    # ================================================================= #
 
     def _IsEnd(self):
         # check end condition of game

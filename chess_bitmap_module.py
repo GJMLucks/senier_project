@@ -1,5 +1,11 @@
-from const_variable import *
+from multiprocessing import Pool
+import multiprocessing as mp
+import numpy as np
+import torch
+import chess
 
+from const_variable import *
+from chess_module import FENboard2board
 
 # convert function
 
@@ -45,7 +51,6 @@ def Board2BitBoardSet(board: list[int]) -> list[int]:
 
     return bitBoardSet
 
-
 def Bitmaps2Board(bitBoardSet: list[int]) -> list[int]:
     board = [empty for _ in range(64)]
 
@@ -59,6 +64,18 @@ def Bitmaps2Board(bitBoardSet: list[int]) -> list[int]:
 
     return board
 
+
+def Bitmap2matrix(bitmap: int) -> list[int]:
+    matrix = [0 for _ in range(64)]
+    mask = 1
+
+    for rank in range(8):
+        for file in range(8):
+            if bitmap & mask:
+                matrix[(8 * rank) + file] = 1
+            mask <<= 1
+
+    return matrix
 
 def pureCoordinate2args(pureCoordinate: str) -> tuple:
     """
@@ -84,6 +101,161 @@ def pureCoordinate2args(pureCoordinate: str) -> tuple:
 
     return currentPosition, nextPosition, promotionPieceType
 
+# ================ NN ================ #
+
+
+promotionSquare = ((48, 55), (8, -1))
+
+
+def NNoutput2uciMove(NNoutputIndex: int) -> chess.Move:
+    '''
+    convert NN output to chess.Move.\n
+    '''
+
+    if NNoutputIndex >> 12:
+        fileOffset = (NNoutputIndex >> 6) & 0b11
+        isBlack = (NNoutputIndex >> 5) & 0b1
+        curPosFile = (NNoutputIndex >> 2) & 0b111
+
+        return chess.Move(
+            promotionSquare[isBlack][0] + curPosFile,
+            promotionSquare[isBlack][1] + curPosFile + fileOffset,
+            promotion=(NNoutputIndex & 0b11) + 2)  # none, p, n, b, r, q, k
+    else:
+        return chess.Move(
+            (NNoutputIndex >> 6),
+            (NNoutputIndex & 0b111111))
+
+
+def NNoutput2uciMove2(NNoutputIndex: int) -> chess.Move:
+    '''
+    convert NN output to pureCoordinate.\n
+    return pureCoordinate.
+    '''
+    result = ""
+
+    if NNoutputIndex >> 12:
+        fileOffset = (NNoutputIndex >> 6) & 0b11
+        isBlack = (NNoutputIndex >> 5) & 0b1
+        curPosFile = ((NNoutputIndex >> 2) & 0b111) | 0b1100000
+
+        result += chr(curPosFile + 1)
+        result += chr(55 - 5*isBlack)
+        result += chr(curPosFile + fileOffset)
+        result += chr(56 - 7*isBlack)
+        result += pieceLiteralLower[NNoutputIndex & 0b11]
+    else:
+        result += chr(((NNoutputIndex >> 6) & 0b111) + 97)
+        result += chr(((NNoutputIndex >> 9) & 0b111) + 49)
+        result += chr((NNoutputIndex & 0b111) + 97)
+        result += chr(((NNoutputIndex >> 3) & 0b111) + 49)
+
+    return chess.Move.from_uci(result)
+
+
+def uci2actIndex(Move: chess.Move) -> int:
+    '''
+    convert actIndex to NN output index.\n
+    return NN output index.
+    '''
+    Move = Move.uci()
+
+    if len(Move) == 5:
+        result = 1 << 12
+        result |= ((ord(Move[0]) - 97) << 2)
+        if ord(Move[1]) == 50:
+            result |= (1 << 5)
+        result |= ((ord(Move[2]) - ord(Move[0]) + 1) << 6)
+        if Move[4] == 'n':
+            result |= 0b00
+        if Move[4] == 'b':
+            result |= 0b01
+        if Move[4] == 'r':
+            result |= 0b10
+        if Move[4] == 'q':
+            result |= 0b11
+    else:
+        result = 0
+        result |= ((ord(Move[0]) - 97) << 6)
+        result |= ((ord(Move[1]) - 49) << 9)
+        result |= ((ord(Move[2]) - 97))
+        result |= ((ord(Move[3]) - 49) << 3)
+
+    return result
+
+
+def uci2actIndexWithMP(Move: chess.Move) -> int:
+    '''
+    convert actIndex to NN output index.\n
+    return NN output index.
+    '''
+    c_proc = mp.current_process()
+    Move = Move.uci()
+
+    if len(Move) == 5:
+        result = 1 << 12
+        result |= ((ord(Move[0]) - 97) << 2)
+        if ord(Move[1]) == 50:
+            result |= (1 << 5)
+        result |= ((ord(Move[2]) - ord(Move[0]) + 1) << 6)
+        if Move[4] == 'n':
+            result |= 0b00
+        if Move[4] == 'b':
+            result |= 0b01
+        if Move[4] == 'r':
+            result |= 0b10
+        if Move[4] == 'q':
+            result |= 0b11
+    else:
+        result = 0
+        result |= ((ord(Move[0]) - 97) << 6)
+        result |= ((ord(Move[1]) - 49) << 9)
+        result |= ((ord(Move[2]) - 97))
+        result |= ((ord(Move[3]) - 49) << 3)
+
+    return result
+
+
+def Fen2NNinput(FEN: str) -> list[int]:
+    '''
+    convert FEN to NN input.\n
+    return list of NN input.
+    '''
+    fen = FEN.split(' ')[0]
+    BBset = Board2BitBoardSet(FENboard2board(fen))[0:8]
+    NNinput = []
+
+    for BB in BBset:
+        NNinput.append(torch.Tensor([(BB >> i) & 1 for i in range(64)]))
+
+    return torch.cat(NNinput, dim=0).float()
+
+
+def Fen2NNinput2(FEN: str) -> list[int]:
+    '''
+    convert FEN to NN input.\n
+    return list of NN input.
+    '''
+    fen = FEN.split(' ')[0]
+    BBset = Board2BitBoardSet(FENboard2board(fen))[0:8]
+    NNinput = [(BBset[index >> 3] >> ((index & 0b111) << 3)) & 0b11111111
+               for index in range(64)]
+
+    return torch.Tensor(
+        np.unpackbits(
+            np.array(NNinput, dtype=np.uint8),
+            bitorder='little'))
+
+
+def board2NNinput2(board: list[int]) -> list[int]:
+    BBset = Board2BitBoardSet(board)[0:8]
+    NNinput = [(BBset[index >> 3] >> ((index & 0b111) << 3)) & 0b11111111
+               for index in range(64)]
+
+    return torch.Tensor(
+        np.unpackbits(
+            np.array(NNinput, dtype=np.uint8),
+            bitorder='little'))
 
 # bit rotate operation
 
@@ -884,7 +1056,7 @@ def getCheckAttackers(bitBoardSet: list, colorOfKing: int) -> int:
     return getAttackers(bitBoardSet, getKingSquare(bitBoardSet, colorOfKing), 2 - colorOfKing)
 
 
-def possibleMove(bitBoardSet: list, board: list, currentPosition: int, sideToMove: int = 0) -> int:
+def possibleMove(bitBoardSet: list, currentPosition: int, sideToMove: int = 0) -> int:
     """
     get bitmap of possible movement for piece on currentPosition.
 
@@ -917,10 +1089,9 @@ def possibleMove(bitBoardSet: list, board: list, currentPosition: int, sideToMov
         return 0x0
 
     # variables
-    boardIndex \
-        = (8*(7 - ((currentPosition >> 3) & 0b111))) \
-        + (currentPosition & 0b111)
-    fromSquare = board[boardIndex]
+    for i in range(8):
+        if bitBoardSet[i] & (1 << currentPosition):
+            fromSquare |= (1 << i)
 
     pieceType = fromSquare & 0b11111100
     colorType = fromSquare & 0b00000011
@@ -986,12 +1157,12 @@ def possibleMove(bitBoardSet: list, board: list, currentPosition: int, sideToMov
         return safeSquare & getKingAttacks(bitBoardSet[nEmpty] | bitBoardSet[oppColorType], currentPosition)
 
 
-def possibleMoveList(bitBoardSet: list, board: list, sideToMove: int) -> list:
+def possibleMoveList(bitBoardSet: list, sideToMove: int) -> list:
     moveList = []
 
     for currentPos in range(63, -1, -1):
         possibleMoveBB = possibleMove(
-            bitBoardSet, board, currentPos, sideToMove)
+            bitBoardSet, currentPos, sideToMove)
         for _ in range(64):
             if possibleMoveBB:
                 squareIndex = bitScan(possibleMoveBB, False)
@@ -1003,8 +1174,8 @@ def possibleMoveList(bitBoardSet: list, board: list, sideToMove: int) -> list:
     return moveList
 
 
-def IsLegalMove(bitBoardSet: list, board: list, currentPosition: int, nextPosition: int) -> bool:
-    if possibleMove(bitBoardSet, board, currentPosition) & (1 << nextPosition):
+def IsLegalMove(bitBoardSet: list, currentPosition: int, nextPosition: int) -> bool:
+    if possibleMove(bitBoardSet, currentPosition) & (1 << nextPosition):
         return True
     return False
 

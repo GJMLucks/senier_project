@@ -345,7 +345,6 @@ class BitBoardTest(unittest.TestCase):
                 # args
                 currentPosition = baseTestSquares[i] + random_offset
                 first = possibleMove(testBBs,
-                                     testBoard,
                                      currentPosition)
                 second = testResult[i] & 0xffffffffffffffff
 

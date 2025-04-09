@@ -24,7 +24,8 @@ white, black = colors
 pieceTypes = [1 << shift for shift in range(2, 8)]
 pawn, knight, bishop, rook, queen, king = pieceTypes
 
-pieceLiteral = ("P", "N", "B", "R", "Q", "K")
+pieceLiteral = ('P', 'N', 'B', 'R', 'Q', 'K')
+pieceLiteralLower = ('n', 'b', 'r', 'q')
 pureCordPromoNotation2PieceType = {'p': (1 << 2), 'n': (
     1 << 3), 'b': (1 << 4), 'r': (1 << 5), 'q': (1 << 6)}
 
@@ -86,6 +87,8 @@ bitBoardDefaultSet = [
     0x0000FFFFFFFF0000,  # empty squares
 ]
 
+emptyPossibleMovBBs = [[0 for _ in range(64)] for _ in range(67)]
+# last matrix is for possible moves with promotion
 
 # movement dataclass
 
