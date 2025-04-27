@@ -1,8 +1,11 @@
+# chessRL.py description
 
-#
-import time
-import glob
-import os
+## ======== imports ======== ##
+
+# for file handling
+import time  # for time stamp and generate unique file name
+import glob  # for file name search
+import os   # for file path
 
 # for DQN testing
 # import gymnasium as gym
@@ -29,6 +32,7 @@ import matplotlib.pyplot as plt
 # local module
 from chess_bitmap_module import *
 
+##
 if torch.cuda.is_available():
     device = torch.device("cuda")
     device = torch.device("cpu")
@@ -63,10 +67,11 @@ class ChessActorCritic(nn.Module):
         self.nonDrawData = []
 
         # waights settings
-        self.fc1 = nn.Linear(512, 1024)
-        self.fc2 = nn.Linear(1024, 2048)
-        self.fc_pi = nn.Linear(2048, 4288)
-        self.fc_v = nn.Linear(2048, 1)
+        self.fc1 = nn.Linear(512, 2048)
+        self.fc2 = nn.Linear(2048, 4096)
+        self.fc3 = nn.Linear(4096, 4096)
+        self.fc_pi = nn.Linear(4096, 4288)
+        self.fc_v = nn.Linear(4096, 1)
 
         # optimizer
         self.optimizer = optim.Adam(self.parameters(), lr=TDAC_learning_rate)
@@ -77,6 +82,7 @@ class ChessActorCritic(nn.Module):
     def pi(self, x, filter):
         x = F.elu(self.fc1(x))
         x = F.elu(self.fc2(x))
+        x = F.elu(self.fc3(x))
         x = F.elu(self.fc_pi(x))
 
         # filter illegal moves
@@ -87,6 +93,7 @@ class ChessActorCritic(nn.Module):
     def v(self, x):
         x = F.elu(self.fc1(x))
         x = F.elu(self.fc2(x))
+        x = F.elu(self.fc3(x))
         v = self.fc_v(x)
 
         return v
@@ -532,12 +539,12 @@ def findOptimalLRateOfChessDTAC(initialLRate, rangeMultiplier, numLRate):
 
         # ======== training nonDraw data ======== #
 
-        trainging_data_fileNames = glob.glob(f'd:\RFData\*.npy')
-        waightFactor = 1/np.sqrt(len(trainging_data_fileNames))
-        for fileName in trainging_data_fileNames:
-            print(fileName)
-            training_data = np.load(fileName, allow_pickle=True)
-            model.train_net_withData(training_data, waightFactor)
+                # trainging_data_fileNames = glob.glob(f'd:\RFData\*.npy')
+                # waightFactor = 1/np.sqrt(len(trainging_data_fileNames))
+                # for fileName in trainging_data_fileNames:
+                #     print(fileName)
+                #     training_data = np.load(fileName, allow_pickle=True)
+                #     model.train_net_withData(training_data, waightFactor)
 
         # ======== processing ======== #
 

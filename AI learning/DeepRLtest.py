@@ -25,10 +25,10 @@ TDAC_learning_rate = 0.0002
 gamma = 0.98
 buffer_limit = 50000
 batch_size = 32
-scoring_limitTimeout = 10
+scoring_limitTimeout = 5
 n_rollout = 10
 
-goal = 3
+goal = 1
 
 # troubleshooting
 np.bool8 = np.bool
@@ -188,7 +188,7 @@ def DQNtest():
             if done or time.time() > startTime + scoring_limitTimeout:
                 break
             
-        print("time : ", time.time() - startTime, "scoring result")
+        # print("time : ", time.time() - startTime)
         timeLapse += time.time() - startTime
         
         if memory.size() > 2000:
@@ -203,11 +203,12 @@ def DQNtest():
             
             if timeLapse > goal*print_interval:
                 print(__name__, "goal reached at episode : ", n_epi)
+                end_epi = n_epi
                 break
             timeLapse = 0
-            
-            
+
     env.close()
+    return end_epi
 
 # ================ REINFORCE ================ #
 
@@ -241,6 +242,8 @@ class Policy(nn.Module):
         self.data = []
 
 def REINFORCE():
+    end_epi = 0
+
     env = gym.make('CartPole-v1')
     pi = Policy()
     
@@ -267,7 +270,7 @@ def REINFORCE():
             if done or time.time() > startTime + scoring_limitTimeout:
                 break
      
-        print("time : ", time.time() - startTime, "scoring result")
+        # print("time : ", time.time() - startTime)
         timeLapse += time.time() - startTime
 
         pi.train_net()
@@ -277,12 +280,19 @@ def REINFORCE():
             print("# of episode : {}, avg score : {}".format(n_epi, score/print_interval))
             score = 0.0
             
+            if score > (1000 * print_interval):
+                print(__name__, "goal reached at episode : ", n_epi)
+                end_epi = n_epi
+                break
+
             if timeLapse > goal*print_interval:
                 print(__name__, "goal reached at episode : ", n_epi)
+                end_epi = n_epi
                 break
             timeLapse = 0
-            
+
     env.close()
+    return end_epi
 
 # ================ TD Actor-Critic ================ #
 
@@ -342,6 +352,8 @@ class ActorCritic(nn.Module):
         self.optimizer.step()
         
 def DTAC():
+    end_epi = 0
+
     env = gym.make('CartPole-v1')
     model = ActorCritic()
     
@@ -367,12 +379,12 @@ def DTAC():
                 s = s_prime
                 score += r
                 
-                if done or time.time() > startTime + scoring_limitTimeout:
+                if done or (time.time() > (startTime + scoring_limitTimeout)):
                     break
     
             model.train_net()
      
-        print("time : ", time.time() - startTime)
+        # print("time : ", time.time() - startTime)
         timeLapse += time.time() - startTime
 
         if n_epi % print_interval == 0 and n_epi != 0:
@@ -382,15 +394,21 @@ def DTAC():
             
             if timeLapse > goal*print_interval:
                 print(__name__, "goal reached at episode : ", n_epi)
+                end_epi = n_epi
                 break
             timeLapse = 0
-            
-    env.close()        
+
+    env.close()
+    return end_epi
 
 # ================ main ================ #
 
 if __name__ == '__main__':
-    DTAC()
-    REINFORCE()
-    DQNtest()
+    ac_result = DTAC()
+    re_result = REINFORCE()
+    dqn_result = DQNtest()
     NNtest()
+
+    print("TDAC result : ", ac_result)
+    print("DQN result : ", dqn_result)
+    print("REINFORCE result : ", re_result)
